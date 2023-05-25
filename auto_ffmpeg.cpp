@@ -45,21 +45,18 @@ int main()
     if (!fs::exists(config["outdir"]))
         fs::create_directory(config["outdir"]);
 
-    for (const fs::path& in : fs::directory_iterator(fs::current_path())) {
+    for (const fs::path& file : fs::directory_iterator(fs::current_path())) {
         if (std::ranges::none_of(exts, [&](auto& ext)
-            { return in.extension() == ext; }))
+            { return file.extension() == ext; }))
             continue;
 
+        auto in = file.filename().string();
         auto out = fs::path(config["outdir"]).
-            append(in.filename().string()).
-            replace_extension(config["outext"]);
+            append(in).replace_extension(config["outext"]).string();
 
-        auto cmd = std::vformat(
-            config["cmd"],
-            std::make_format_args(in.filename().string(), out.string())
+        cmd_queues[wk_idx].push_back(
+            std::vformat(config["cmd"], std::make_format_args(in, out))
         );
-
-        cmd_queues[wk_idx].push_back(cmd);
 
         wk_idx = (wk_idx + 1) % wk_cnt;
     }
