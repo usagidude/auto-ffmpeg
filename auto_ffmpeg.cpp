@@ -79,12 +79,12 @@ void batch_mode(std::map<std::string, std::string>& config)
     for (const auto& queue : cmd_queues) {
         cmd_workers.emplace_back([&] {
             bool hide = config["window"] == "hide";
-        for (const auto& cmd : queue) {
-            process ffmpeg(cmd, hide);
-            ffmpeg.start();
-            ffmpeg.wait_for_exit();
-        }
-            });
+            for (const auto& cmd : queue) {
+                process ffmpeg(cmd, hide);
+                ffmpeg.start();
+                ffmpeg.wait_for_exit();
+            }
+        });
     }
 
     std::cout << "Working..." << std::endl;
