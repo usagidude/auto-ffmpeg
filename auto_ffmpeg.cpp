@@ -31,9 +31,37 @@ std::map<std::string, std::string> load_config(const std::string& file)
     return out_map;
 }
 
-int main()
+void single_mode(const std::string& input, std::map<std::string, std::string>& config)
+{
+    auto in = fs::path(input).filename().string();
+    auto out = fs::path(config["outdir"]).
+        append(in).replace_extension(config["outext"]).string();
+
+    process ffmpeg(
+        std::vformat(config["cmd"], std::make_format_args(in, out)),
+        config["window"] == "hide"
+    );
+
+    std::cout << "Working..." << std::endl;
+    ffmpeg.start();
+    ffmpeg.wait_for_exit();
+
+    std::cout << "Done. Exiting in 60 seconds..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(60));
+}
+
+int main(int argc, char* argv[])
 {
     auto config = load_config("config.txt");
+
+    if (!fs::exists(config["outdir"]))
+        fs::create_directory(config["outdir"]);
+
+    if (argc > 1) {
+        single_mode(argv[1], config);
+        return 0;
+    }
+
     auto wk_idx = 0, wk_cnt = std::stoi(config["count"]);
     std::vector<std::vector<std::string>> cmd_queues(wk_cnt);
     std::vector<std::thread> cmd_workers;
@@ -41,9 +69,6 @@ int main()
 
     for (const auto& ext : std::views::split(config["inext"], '|'))
         exts.emplace_back(ext.begin(), ext.end());
-
-    if (!fs::exists(config["outdir"]))
-        fs::create_directory(config["outdir"]);
 
     for (const fs::path& file : fs::directory_iterator(fs::current_path())) {
         if (std::ranges::none_of(exts, [&](auto& ext)
