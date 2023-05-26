@@ -50,18 +50,8 @@ void single_mode(const std::string& input, std::map<std::string, std::string>& c
     std::this_thread::sleep_for(std::chrono::seconds(60));
 }
 
-int main(int argc, char* argv[])
+void batch_mode(std::map<std::string, std::string>& config)
 {
-    auto config = load_config("config.txt");
-
-    if (!fs::exists(config["outdir"]))
-        fs::create_directory(config["outdir"]);
-
-    if (argc > 1) {
-        single_mode(argv[1], config);
-        return 0;
-    }
-
     auto wk_idx = 0, wk_cnt = std::stoi(config["count"]);
     std::vector<std::vector<std::string>> cmd_queues(wk_cnt);
     std::vector<std::thread> cmd_workers;
@@ -89,12 +79,12 @@ int main(int argc, char* argv[])
     for (const auto& queue : cmd_queues) {
         cmd_workers.emplace_back([&] {
             bool hide = config["window"] == "hide";
-            for (const auto& cmd : queue) {
-                process ffmpeg(cmd, hide);
-                ffmpeg.start();
-                ffmpeg.wait_for_exit();
-            }
-        });
+        for (const auto& cmd : queue) {
+            process ffmpeg(cmd, hide);
+            ffmpeg.start();
+            ffmpeg.wait_for_exit();
+        }
+            });
     }
 
     std::cout << "Working..." << std::endl;
@@ -104,4 +94,18 @@ int main(int argc, char* argv[])
 
     std::cout << "Done. Exiting in 60 seconds..." << std::endl;
     std::this_thread::sleep_for(std::chrono::seconds(60));
+}
+
+int main(int argc, char* argv[])
+{
+    auto config = load_config("config.txt");
+
+    if (!fs::exists(config["outdir"]))
+        fs::create_directory(config["outdir"]);
+
+    if (argc > 1)
+        single_mode(argv[1], config);
+    else
+        batch_mode(config);
+
 }
