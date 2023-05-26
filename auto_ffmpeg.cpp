@@ -15,7 +15,7 @@
 
 namespace fs = std::filesystem;
 
-std::map<std::string, std::string> load_config(const std::string& file)
+static std::map<std::string, std::string> load_config(const std::string& file)
 {
     std::map<std::string, std::string> out_map;
     std::regex config_rx("^ *([^ >]+) *> *(.+)$");
@@ -31,7 +31,7 @@ std::map<std::string, std::string> load_config(const std::string& file)
     return out_map;
 }
 
-void single_mode(const std::string& input, std::map<std::string, std::string>& config)
+static void single_mode(const std::string& input, std::map<std::string, std::string>& config)
 {
     auto in = fs::path(input).filename().string();
     auto out = fs::path(config["outdir"]).
@@ -50,7 +50,7 @@ void single_mode(const std::string& input, std::map<std::string, std::string>& c
     std::this_thread::sleep_for(std::chrono::seconds(60));
 }
 
-void batch_mode(std::map<std::string, std::string>& config)
+static void batch_mode(std::map<std::string, std::string>& config)
 {
     auto wk_idx = 0, wk_cnt = std::stoi(config["count"]);
     std::vector<std::vector<std::string>> cmd_queues(wk_cnt);
