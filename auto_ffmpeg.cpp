@@ -88,9 +88,8 @@ void batch_mode(std::map<std::string, std::string>& config)
     }
 
     std::cout << "Working..." << std::endl;
-    for (auto& t : cmd_workers) {
+    for (auto& t : cmd_workers)
         t.join();
-    }
 
     std::cout << "Done. Exiting in 60 seconds..." << std::endl;
     std::this_thread::sleep_for(std::chrono::seconds(60));
