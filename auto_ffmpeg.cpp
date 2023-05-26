@@ -17,10 +17,11 @@ namespace fs = std::filesystem;
 
 static std::map<std::string, std::string> load_config(const std::string& file)
 {
+    fs::path wdir(process::get_exe_path());
     std::map<std::string, std::string> out_map;
     std::regex config_rx("^ *([^ >]+) *> *(.+)$");
 
-    std::ifstream config_file(file);
+    std::ifstream config_file(wdir.replace_filename(file));
     for (std::string line; std::getline(config_file, line);) {
         std::smatch m;
         std::regex_match(line, m, config_rx);
@@ -28,29 +29,24 @@ static std::map<std::string, std::string> load_config(const std::string& file)
     }
     config_file.close();
 
+    out_map["outdir"] = wdir.replace_filename(out_map["outdir"]).string();
     return out_map;
 }
 
-static void single_mode(const std::string& input, std::map<std::string, std::string>& config)
+static void exec_ffmpeg(const std::string& cmd,
+    const fs::path& in, fs::path out,
+    const std::string& outext, bool hide_window)
 {
-    auto in = fs::path(input).filename().string();
-    auto out = fs::path(config["outdir"]).
-        append(in).replace_extension(config["outext"]).string();
-
+    out.append(in.filename().string()).replace_extension(outext);
     process ffmpeg(
-        std::vformat(config["cmd"], std::make_format_args(in, out)),
-        config["window"] == "hide"
+        std::vformat(cmd, std::make_format_args(in.string(), out.string())),
+        hide_window
     );
-
-    std::cout << "Working..." << std::endl;
     ffmpeg.start();
     ffmpeg.wait_for_exit();
-
-    std::cout << "Done. Exiting in 60 seconds..." << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(60));
 }
 
-static void batch_mode(std::map<std::string, std::string>& config)
+static void batch_mode(std::map<std::string, std::string>& config, const fs::path& targetdir)
 {
     auto wk_idx = 0, wk_cnt = std::stoi(config["count"]);
     std::vector<std::vector<std::string>> cmd_queues(wk_cnt);
@@ -60,39 +56,29 @@ static void batch_mode(std::map<std::string, std::string>& config)
     for (const auto& ext : std::views::split(config["inext"], '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
-    for (const fs::path& file : fs::directory_iterator(fs::current_path())) {
+    for (const fs::path& file : fs::directory_iterator(targetdir)) {
         if (std::ranges::none_of(exts, [&](auto& ext)
             { return file.extension() == ext; }))
             continue;
-
-        auto in = file.filename().string();
-        auto out = fs::path(config["outdir"]).
-            append(in).replace_extension(config["outext"]).string();
-
-        cmd_queues[wk_idx].push_back(
-            std::vformat(config["cmd"], std::make_format_args(in, out))
-        );
-
+        cmd_queues[wk_idx].push_back(file.string());
         wk_idx = (wk_idx + 1) % wk_cnt;
     }
 
     for (const auto& queue : cmd_queues) {
         cmd_workers.emplace_back([&] {
-            bool hide = config["window"] == "hide";
-            for (const auto& cmd : queue) {
-                process ffmpeg(cmd, hide);
-                ffmpeg.start();
-                ffmpeg.wait_for_exit();
+            for (const auto& file : queue) {
+                exec_ffmpeg(config["cmd"],
+                    file,
+                    config["outdir"],
+                    config["outext"],
+                    config["window"] == "hide"
+                );
             }
         });
     }
 
-    std::cout << "Working..." << std::endl;
     for (auto& t : cmd_workers)
         t.join();
-
-    std::cout << "Done. Exiting in 60 seconds..." << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(60));
 }
 
 int main(int argc, char* argv[])
@@ -102,9 +88,25 @@ int main(int argc, char* argv[])
     if (!fs::exists(config["outdir"]))
         fs::create_directory(config["outdir"]);
 
-    if (argc > 1)
-        single_mode(argv[1], config);
-    else
-        batch_mode(config);
+    std::cout << "Working..." << std::endl;
 
+    if (argc > 1) {
+        if (fs::is_directory(argv[1])) {
+            batch_mode(config, argv[1]);
+        }
+        else {
+            exec_ffmpeg(config["cmd"],
+                argv[1],
+                config["outdir"],
+                config["outext"],
+                config["window"] == "hide"
+            );
+        }
+    }
+    else {
+        batch_mode(config, fs::path(process::get_exe_path()).remove_filename());
+    }
+
+    std::cout << "Done. Exiting in 60 seconds..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(60));
 }

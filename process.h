@@ -24,6 +24,7 @@ private:
     std::string _cmd;
     bool _hide;
 public:
+    static std::string get_exe_path();
     process(const std::string& cmd, bool hide);
     void start();
     void wait_for_exit();
