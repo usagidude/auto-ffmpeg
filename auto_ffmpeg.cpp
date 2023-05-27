@@ -81,6 +81,19 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
         t.join();
 }
 
+std::string get_video_codec(const fs::path& input)
+{
+    std::regex vid_rx("Stream #0:0.+Video: ([^ ,]+)");
+    std::smatch m;
+    auto cmd = std::format("ffprobe \"{}\"", input.string());
+    process proc(cmd, false);
+    proc.start_with_redirect();
+    proc.wait_for_exit();
+    auto output = proc.get_stdout();
+    std::regex_search(output, m, vid_rx);
+    return m[1];
+}
+
 int main(int argc, char* argv[])
 {
     auto config = load_config("config.txt");
