@@ -17,11 +17,10 @@ namespace fs = std::filesystem;
 
 static std::map<std::string, std::string> load_config(const std::string& file)
 {
-    fs::path wdir(process::get_exe_directory());
     std::map<std::string, std::string> out_map;
     std::regex config_rx("^ *([^ >]+) *> *(.+)$");
 
-    std::ifstream config_file(wdir.append(file));
+    std::ifstream config_file(process::get_exe_directory().append(file));
     for (std::string line; std::getline(config_file, line);) {
         std::smatch m;
         std::regex_match(line, m, config_rx);
