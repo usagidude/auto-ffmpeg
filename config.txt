@@ -1,7 +1,7 @@
 cmd>ffmpeg -y -hide_banner -hwaccel cuda -i "{}" -c:v hevc_nvenc -preset:v p7 -rc vbr -cq 0 -qmin:v 22 -qmax:v 27 -multipass 2 -spatial-aq 1 -aq-strength 5 -rc-lookahead 20 -b:v 1M -bufsize 512k -c:a copy -c:s copy -map 0 "{}"
 count>3
-outdir>E:\vids
-outmode>absolute
+outdir>hevc
+outmode>local
 inext>.mkv|.mp4|.mov|.avi
 outext>.mkv
 window>show
