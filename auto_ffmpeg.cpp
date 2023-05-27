@@ -86,8 +86,17 @@ int main(int argc, char* argv[])
 {
     auto config = load_config("config.txt");
 
-    if (config["outmode"] != "absolute")
+    if (config["outmode"] == "local") {
         config["outdir"] = process::get_exe_directory().append(config["outdir"]).string();
+    }
+    else if (config["outmode"] == "source" && argc > 1) {
+        fs::path inpath(argv[1]);
+        if (fs::is_directory(argv[1]))
+            inpath.append(config["outdir"]);
+        else
+            inpath.replace_filename(config["outdir"]);
+        config["outdir"] = inpath.string();
+    }
 
     if (!fs::exists(config["outdir"]))
         fs::create_directory(config["outdir"]);
@@ -95,12 +104,10 @@ int main(int argc, char* argv[])
     std::cout << "Working..." << std::endl;
 
     if (argc > 1) {
-        if (fs::is_directory(argv[1])) {
+        if (fs::is_directory(argv[1]))
             batch_mode(config, argv[1]);
-        }
-        else {
+        else
             exec_ffmpeg(argv[1], config, true);
-        }
     }
     else {
         batch_mode(config, process::get_exe_directory());
