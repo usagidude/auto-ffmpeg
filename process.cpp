@@ -3,18 +3,21 @@
 #include <spawn.h>
 #include <sys/wait.h>
 #include <array>
-#include <filesystem>
 #else
 #include <Windows.h>
 #endif
-#include <string>
 #include "process.h"
 
 #ifdef __gnu_linux__
 
-std::string process::get_exe_path()
+std::filesystem::path process::get_exe_path()
 {
-    return std::filesystem::canonical("/proc/self/exe").string();
+    return std::filesystem::canonical("/proc/self/exe");
+}
+
+std::filesystem::path process::get_exe_directory()
+{
+    return std::filesystem::path(get_exe_path()).remove_filename();
 }
 
 process::process(const std::string& cmd, bool hide) :
@@ -54,11 +57,16 @@ process::~process()
 }
 #else
 
-std::string process::get_exe_path()
+std::filesystem::path process::get_exe_path()
 {
     std::string exe(MAX_PATH, 0);
     GetModuleFileNameA(nullptr, exe.data(), MAX_PATH);
     return exe;
+}
+
+std::filesystem::path process::get_exe_directory()
+{
+    return std::filesystem::path(get_exe_path()).remove_filename();
 }
 
 process::process(const std::string& cmd, bool hide) :

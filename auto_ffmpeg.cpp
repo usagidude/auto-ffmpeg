@@ -17,11 +17,11 @@ namespace fs = std::filesystem;
 
 static std::map<std::string, std::string> load_config(const std::string& file)
 {
-    fs::path wdir(process::get_exe_path());
+    fs::path wdir(process::get_exe_directory());
     std::map<std::string, std::string> out_map;
     std::regex config_rx("^ *([^ >]+) *> *(.+)$");
 
-    std::ifstream config_file(wdir.replace_filename(file));
+    std::ifstream config_file(wdir.append(file));
     for (std::string line; std::getline(config_file, line);) {
         std::smatch m;
         std::regex_match(line, m, config_rx);
@@ -29,27 +29,35 @@ static std::map<std::string, std::string> load_config(const std::string& file)
     }
     config_file.close();
 
-    out_map["outdir"] = wdir.replace_filename(out_map["outdir"]).string();
     return out_map;
 }
 
-static void exec_ffmpeg(const std::string& cmd,
-    const fs::path& in, fs::path out,
-    const std::string& outext, bool hide_window)
+static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string>& config, bool local_exec = false)
 {
-    out.append(in.filename().string()).replace_extension(outext);
-    process ffmpeg(
-        std::vformat(cmd, std::make_format_args(in.string(), out.string())),
-        hide_window
+    fs::path output(config["outdir"]);
+
+    output.append(input.filename().string()).
+        replace_extension(config["outext"]);
+
+    auto ffmpeg_cmd = std::vformat(
+        config["cmd"],
+        std::make_format_args(input.string(), output.string())
     );
-    ffmpeg.start();
-    ffmpeg.wait_for_exit();
+
+    if (local_exec) {
+        std::system(ffmpeg_cmd.c_str());
+    }
+    else {
+        process ffmpeg(ffmpeg_cmd, config["window"] == "hide");
+        ffmpeg.start();
+        ffmpeg.wait_for_exit();
+    }
 }
 
 static void batch_mode(std::map<std::string, std::string>& config, const fs::path& targetdir)
 {
     auto wk_idx = 0, wk_cnt = std::stoi(config["count"]);
-    std::vector<std::vector<std::string>> cmd_queues(wk_cnt);
+    std::vector<std::vector<fs::path>> cmd_queues(wk_cnt);
     std::vector<std::thread> cmd_workers;
     std::vector<std::string> exts;
 
@@ -60,21 +68,14 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
         if (std::ranges::none_of(exts, [&](auto& ext)
             { return file.extension() == ext; }))
             continue;
-        cmd_queues[wk_idx].push_back(file.string());
+        cmd_queues[wk_idx].push_back(file);
         wk_idx = (wk_idx + 1) % wk_cnt;
     }
 
     for (const auto& queue : cmd_queues) {
-        cmd_workers.emplace_back([&] {
-            for (const auto& file : queue) {
-                exec_ffmpeg(config["cmd"],
-                    file,
-                    config["outdir"],
-                    config["outext"],
-                    config["window"] == "hide"
-                );
-            }
-        });
+        cmd_workers.emplace_back(
+            [&] { for (const auto& input : queue) exec_ffmpeg(input, config); }
+        );
     }
 
     for (auto& t : cmd_workers)
@@ -84,6 +85,9 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
 int main(int argc, char* argv[])
 {
     auto config = load_config("config.txt");
+
+    if (config["outmode"] != "absolute")
+        config["outdir"] = process::get_exe_directory().append(config["outdir"]).string();
 
     if (!fs::exists(config["outdir"]))
         fs::create_directory(config["outdir"]);
@@ -95,16 +99,11 @@ int main(int argc, char* argv[])
             batch_mode(config, argv[1]);
         }
         else {
-            exec_ffmpeg(config["cmd"],
-                argv[1],
-                config["outdir"],
-                config["outext"],
-                config["window"] == "hide"
-            );
+            exec_ffmpeg(argv[1], config, true);
         }
     }
     else {
-        batch_mode(config, fs::path(process::get_exe_path()).remove_filename());
+        batch_mode(config, process::get_exe_directory());
     }
 
     std::cout << "Done. Exiting in 60 seconds..." << std::endl;
