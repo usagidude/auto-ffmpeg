@@ -27,19 +27,16 @@ class process
 private:
     void* _hProcess;
     void* _hThread;
-    void* stdin_rd;
     void* stdout_rd;
-    void* stdin_wr;
     void* stdout_wr;
     std::string _cmd;
     bool _hide;
-    
+    bool _redirect;
 public:
     static std::filesystem::path get_exe_path();
     static std::filesystem::path get_exe_directory();
-    process(const std::string& cmd, bool hide);
+    process(const std::string& cmd, bool hide = false, bool redirect = false);
     void start();
-    void start_with_redirect();
     void wait_for_exit();
     std::string get_stdout();
     ~process();

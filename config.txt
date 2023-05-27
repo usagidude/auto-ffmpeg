@@ -2,6 +2,8 @@ cmd>ffmpeg -y -hide_banner -hwaccel cuda -i "{}" -c:v hevc_nvenc -preset:v p7 -r
 count>3
 outdir>hevc
 outmode>source
+invcodec>h264
+inacodec>any
 inext>.mkv|.mp4|.mov|.avi
 outext>.mkv
 window>show

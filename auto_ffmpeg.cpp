@@ -53,12 +53,26 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
     }
 }
 
+static std::string get_video_codec(const fs::path& input)
+{
+    std::regex vid_rx("Stream #0:0.+Video: ([a-z0-9]+)", std::regex_constants::icase);
+    std::smatch m;
+    auto cmd = std::format("ffprobe \"{}\"", input.string());
+    process proc(cmd, false, true);
+    proc.start();
+    proc.wait_for_exit();
+    auto output = proc.get_stdout();
+    std::regex_search(output, m, vid_rx);
+    return m[1];
+}
+
 static void batch_mode(std::map<std::string, std::string>& config, const fs::path& targetdir)
 {
     auto wk_idx = 0, wk_cnt = std::stoi(config["count"]);
     std::vector<std::vector<fs::path>> cmd_queues(wk_cnt);
     std::vector<std::thread> cmd_workers;
     std::vector<std::string> exts;
+    std::string invcodec = config["invcodec"] == "any" ? "" : config["invcodec"];
 
     for (const auto& ext : std::views::split(config["inext"], '|'))
         exts.emplace_back(ext.begin(), ext.end());
@@ -67,6 +81,9 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
         if (std::ranges::none_of(exts, [&](auto& ext)
             { return file.extension() == ext; }))
             continue;
+        if (!invcodec.empty() && invcodec != get_video_codec(file))
+            continue;
+
         cmd_queues[wk_idx].push_back(file);
         wk_idx = (wk_idx + 1) % wk_cnt;
     }
@@ -81,18 +98,7 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
         t.join();
 }
 
-std::string get_video_codec(const fs::path& input)
-{
-    std::regex vid_rx("Stream #0:0.+Video: ([^ ,]+)");
-    std::smatch m;
-    auto cmd = std::format("ffprobe \"{}\"", input.string());
-    process proc(cmd, false);
-    proc.start_with_redirect();
-    proc.wait_for_exit();
-    auto output = proc.get_stdout();
-    std::regex_search(output, m, vid_rx);
-    return m[1];
-}
+
 
 int main(int argc, char* argv[])
 {

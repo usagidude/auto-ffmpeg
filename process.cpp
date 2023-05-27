@@ -57,51 +57,17 @@ process::~process()
 }
 #else
 
-void process::start_with_redirect()
-{
-    SECURITY_ATTRIBUTES saAttr = {};
-
-    saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
-    saAttr.bInheritHandle = TRUE;
-    saAttr.lpSecurityDescriptor = NULL;
-
-    CreatePipe(&stdout_rd, &stdout_wr, &saAttr, 0);
-    SetHandleInformation(stdout_rd, HANDLE_FLAG_INHERIT, 0);
-    CreatePipe(&stdin_rd, &stdin_wr, &saAttr, 0);
-    SetHandleInformation(stdin_wr, HANDLE_FLAG_INHERIT, 0);
-
-    PROCESS_INFORMATION proc_info;
-    STARTUPINFOA start_info = {};
-
-    start_info.cb = sizeof(STARTUPINFOA);
-    start_info.hStdError = stdout_wr;
-    start_info.hStdOutput = stdout_wr;
-    start_info.hStdInput = stdin_rd;
-    start_info.dwFlags |= STARTF_USESTDHANDLES;
-
-    // Create the child process. 
-
-    CreateProcessA(NULL,
-        _cmd.data(),     // command line 
-        NULL,          // process security attributes 
-        NULL,          // primary thread security attributes 
-        TRUE,          // handles are inherited 
-        0,             // creation flags 
-        NULL,          // use parent's environment 
-        NULL,          // use parent's current directory 
-        &start_info,  // STARTUPINFO pointer 
-        &proc_info);  //
-    _hProcess = proc_info.hProcess;
-    _hThread = proc_info.hThread;
-
-}
-
 std::string process::get_stdout()
 {
-    DWORD r;
-    std::string buf(4096, 0);
-    ReadFile(stdout_rd, buf.data(), 4096, &r, nullptr);
-    return buf.data();
+    if (!stdout_rd)
+        return std::string();
+    __declspec(thread) static char stdout_buf[MAXINT16];
+    DWORD r = 0;
+    memset(stdout_buf, 0, MAXINT16);
+    if (ReadFile(stdout_rd, stdout_buf, MAXINT16, &r, nullptr)) {
+
+    }
+    return std::string(stdout_buf, r);
 }
 
 std::filesystem::path process::get_exe_path()
@@ -116,23 +82,39 @@ std::filesystem::path process::get_exe_directory()
     return get_exe_path().remove_filename();
 }
 
-process::process(const std::string& cmd, bool hide) :
+process::process(const std::string& cmd, bool hide, bool redirect) :
     _hProcess(nullptr), _hThread(nullptr),
-    _cmd(cmd), _hide(hide), stdin_rd(nullptr),
-    stdout_rd(nullptr), stdin_wr(nullptr), stdout_wr(nullptr) {}
+    _cmd(cmd), _hide(hide), _redirect(redirect),
+    stdout_rd(nullptr), stdout_wr(nullptr)
+{
+    if (redirect) {
+        SECURITY_ATTRIBUTES sec_att{};
+        sec_att.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sec_att.bInheritHandle = TRUE;
+        sec_att.lpSecurityDescriptor = NULL;
+        CreatePipe(&stdout_rd, &stdout_wr, &sec_att, 0);
+        SetHandleInformation(stdout_rd, HANDLE_FLAG_INHERIT, 0);
+    }
+}
 
 void process::start()
 {
     STARTUPINFOA start_info = {};
     PROCESS_INFORMATION proc_info;
     start_info.cb = sizeof(start_info);
-    if (_hide) {
+    if (_redirect) {
+        start_info.hStdError = stdout_wr;
+        start_info.hStdOutput = stdout_wr;
+        start_info.hStdInput = INVALID_HANDLE_VALUE;
+        start_info.dwFlags = STARTF_USESTDHANDLES;
+    }
+    else if (_hide) {
         start_info.dwFlags = STARTF_USESHOWWINDOW;
         start_info.wShowWindow = SW_HIDE;
     }
     CreateProcessA(NULL, _cmd.data(),
-        NULL, NULL, FALSE,
-        CREATE_NEW_CONSOLE,
+        NULL, NULL, _redirect,
+        _redirect ? 0:CREATE_NEW_CONSOLE,
         NULL, NULL, &start_info, &proc_info);
     _hProcess = proc_info.hProcess;
     _hThread = proc_info.hThread;
@@ -151,10 +133,8 @@ process::~process()
         CloseHandle(_hProcess);
         CloseHandle(_hThread);
     }
-    if (stdin_rd) {
-        CloseHandle(stdin_rd);
+    if (stdout_rd) {
         CloseHandle(stdout_rd);
-        CloseHandle(stdin_wr);
         CloseHandle(stdout_wr);
     }
 }
