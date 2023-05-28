@@ -23,8 +23,8 @@ class process
 private:
     void* _hProcess;
     void* _hThread;
-    void* stdout_rd;
-    void* stdout_wr;
+    void* _stdout_rd;
+    void* _stdout_wr;
     std::string _cmd;
     bool _hide;
     bool _redirect;

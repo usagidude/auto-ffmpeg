@@ -72,15 +72,15 @@ std::filesystem::path process::get_exe_directory()
 process::process(const std::string& cmd, bool hide, bool redirect) :
     _hProcess(nullptr), _hThread(nullptr),
     _cmd(cmd), _hide(hide), _redirect(redirect),
-    stdout_rd(nullptr), stdout_wr(nullptr)
+    _stdout_rd(nullptr), _stdout_wr(nullptr)
 {
     if (redirect) {
         SECURITY_ATTRIBUTES sec_att{};
         sec_att.nLength = sizeof(SECURITY_ATTRIBUTES);
         sec_att.bInheritHandle = TRUE;
         sec_att.lpSecurityDescriptor = NULL;
-        CreatePipe(&stdout_rd, &stdout_wr, &sec_att, 0);
-        SetHandleInformation(stdout_rd, HANDLE_FLAG_INHERIT, 0);
+        CreatePipe(&_stdout_rd, &_stdout_wr, &sec_att, 0);
+        SetHandleInformation(_stdout_rd, HANDLE_FLAG_INHERIT, 0);
     }
 }
 
@@ -90,8 +90,8 @@ void process::start()
     PROCESS_INFORMATION proc_info;
     start_info.cb = sizeof(start_info);
     if (_redirect) {
-        start_info.hStdError = stdout_wr;
-        start_info.hStdOutput = stdout_wr;
+        start_info.hStdError = _stdout_wr;
+        start_info.hStdOutput = _stdout_wr;
         start_info.hStdInput = INVALID_HANDLE_VALUE;
         start_info.dwFlags = STARTF_USESTDHANDLES;
     }
@@ -116,11 +116,11 @@ void process::wait_for_exit()
 
 std::string process::get_stdout()
 {
-    if (!stdout_rd)
-        return std::string();
     __declspec(thread) static char stdout_buf[MAXINT16];
+    if (!_stdout_rd)
+        return std::string();
     DWORD r = 0;
-    if (ReadFile(stdout_rd, stdout_buf, MAXINT16, &r, nullptr)) {
+    if (ReadFile(_stdout_rd, stdout_buf, MAXINT16, &r, nullptr)) {
 
     }
     return std::string(stdout_buf, r);
@@ -133,9 +133,9 @@ process::~process()
         CloseHandle(_hProcess);
         CloseHandle(_hThread);
     }
-    if (stdout_rd) {
-        CloseHandle(stdout_rd);
-        CloseHandle(stdout_wr);
+    if (_stdout_rd) {
+        CloseHandle(_stdout_rd);
+        CloseHandle(_stdout_wr);
     }
 }
 #endif

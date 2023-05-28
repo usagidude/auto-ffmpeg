@@ -35,12 +35,12 @@ static std::string get_video_codec(const fs::path& input)
 {
     std::regex vid_rx("Stream #0:0.+Video: ([a-z0-9]+)", std::regex_constants::icase);
     std::smatch m;
-    process proc(
+    process ffprobe(
         std::format("ffprobe \"{}\"", input.string()), false, true
     );
-    proc.start();
-    proc.wait_for_exit();
-    const auto output = proc.get_stdout();
+    ffprobe.start();
+    ffprobe.wait_for_exit();
+    const auto output = ffprobe.get_stdout();
     if (std::regex_search(output, m, vid_rx))
         return m[1];
     else
