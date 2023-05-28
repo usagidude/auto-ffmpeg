@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 static std::map<std::string, std::string> load_config(const std::string& file)
 {
     std::map<std::string, std::string> out_map;
-    std::regex config_rx("^ *([^ >]+) *> *(.+)$");
+    std::regex config_rx("^ *([a-z]+) *> *(.+)$");
 
     std::ifstream config_file(process::get_exe_directory().append(file));
     for (std::string line; std::getline(config_file, line);) {
@@ -35,11 +35,15 @@ static std::string get_video_codec(const fs::path& input)
 {
     std::regex vid_rx("Stream #0:0.+Video: ([a-z0-9]+)", std::regex_constants::icase);
     std::smatch m;
+    std::string output;
+
     process ffprobe(
-        std::format("ffprobe \"{}\"", input.string()), false, true
+        std::format("ffprobe \"{}\"", input.string()),
+        false, true
     );
     ffprobe.run();
-    const auto output = ffprobe.get_stdout();
+    ffprobe.get_stdout(output);
+
     return std::regex_search(output, m, vid_rx) ? m[1] : std::string();
 }
 

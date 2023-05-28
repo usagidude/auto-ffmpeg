@@ -35,7 +35,7 @@ public:
     void start();
     void wait_for_exit();
     void run();
-    std::string get_stdout();
+    void get_stdout(std::string& out);
     ~process();
 };
 #endif

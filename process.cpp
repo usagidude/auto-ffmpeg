@@ -120,13 +120,12 @@ void process::run()
     wait_for_exit();
 }
 
-std::string process::get_stdout()
+void process::get_stdout(std::string& out)
 {
     __declspec(thread) static char stdout_buf[MAXINT16];
     DWORD r = 0;
     if ((_stdout_rd != nullptr) && ReadFile(_stdout_rd, stdout_buf, MAXINT16, &r, nullptr))
-        return std::string(stdout_buf, r);
-    return "";
+        out.assign(stdout_buf, r);
 }
 
 process::~process()
