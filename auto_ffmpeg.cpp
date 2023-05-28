@@ -31,12 +31,31 @@ static std::map<std::string, std::string> load_config(const std::string& file)
     return out_map;
 }
 
+static std::string get_video_codec(const fs::path& input)
+{
+    std::regex vid_rx("Stream #0:0.+Video: ([a-z0-9]+)", std::regex_constants::icase);
+    std::smatch m;
+    process proc(
+        std::format("ffprobe \"{}\"", input.string()), false, true
+    );
+    proc.start();
+    proc.wait_for_exit();
+    const auto output = proc.get_stdout();
+    if (std::regex_search(output, m, vid_rx))
+        return m[1];
+    else
+        return "";
+
+}
+
 static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string>& config, bool local_exec = false)
 {
     fs::path output(config["outdir"]);
 
-    output.append(input.filename().string()).
-        replace_extension(config["outext"]);
+    output.append(input.filename().string());
+
+    if (config["outext"] != "keep")
+        output.replace_extension(config["outext"]);
 
     auto ffmpeg_cmd = std::vformat(
         config["cmd"],
@@ -51,19 +70,6 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
         ffmpeg.start();
         ffmpeg.wait_for_exit();
     }
-}
-
-static std::string get_video_codec(const fs::path& input)
-{
-    std::regex vid_rx("Stream #0:0.+Video: ([a-z0-9]+)", std::regex_constants::icase);
-    std::smatch m;
-    auto cmd = std::format("ffprobe \"{}\"", input.string());
-    process proc(cmd, false, true);
-    proc.start();
-    proc.wait_for_exit();
-    auto output = proc.get_stdout();
-    std::regex_search(output, m, vid_rx);
-    return m[1];
 }
 
 static void batch_mode(std::map<std::string, std::string>& config, const fs::path& targetdir)
@@ -97,8 +103,6 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
     for (auto& t : cmd_workers)
         t.join();
 }
-
-
 
 int main(int argc, char* argv[])
 {

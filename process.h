@@ -2,10 +2,6 @@
 #include <string>
 #include <filesystem>
 #ifdef __gnu_linux__
-#else
-#include <Windows.h>
-#endif
-#ifdef __gnu_linux__
 class process
 {
 private:

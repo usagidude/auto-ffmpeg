@@ -57,19 +57,6 @@ process::~process()
 }
 #else
 
-std::string process::get_stdout()
-{
-    if (!stdout_rd)
-        return std::string();
-    __declspec(thread) static char stdout_buf[MAXINT16];
-    DWORD r = 0;
-    memset(stdout_buf, 0, MAXINT16);
-    if (ReadFile(stdout_rd, stdout_buf, MAXINT16, &r, nullptr)) {
-
-    }
-    return std::string(stdout_buf, r);
-}
-
 std::filesystem::path process::get_exe_path()
 {
     std::string exe(MAX_PATH, 0);
@@ -99,7 +86,7 @@ process::process(const std::string& cmd, bool hide, bool redirect) :
 
 void process::start()
 {
-    STARTUPINFOA start_info = {};
+    STARTUPINFOA start_info{};
     PROCESS_INFORMATION proc_info;
     start_info.cb = sizeof(start_info);
     if (_redirect) {
@@ -126,6 +113,19 @@ void process::wait_for_exit()
         WaitForSingleObject(_hProcess, INFINITE);
     }
 }
+
+std::string process::get_stdout()
+{
+    if (!stdout_rd)
+        return std::string();
+    __declspec(thread) static char stdout_buf[MAXINT16];
+    DWORD r = 0;
+    if (ReadFile(stdout_rd, stdout_buf, MAXINT16, &r, nullptr)) {
+
+    }
+    return std::string(stdout_buf, r);
+}
+
 
 process::~process()
 {
