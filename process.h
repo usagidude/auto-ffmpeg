@@ -21,8 +21,8 @@ public:
 class process
 {
 private:
-    void* _hProcess;
-    void* _hThread;
+    void* _process_handle;
+    void* _thread_handle;
     void* _stdout_rd;
     void* _stdout_wr;
     std::string _cmd;
@@ -34,6 +34,7 @@ public:
     process(const std::string& cmd, bool hide = false, bool redirect = false);
     void start();
     void wait_for_exit();
+    void run();
     std::string get_stdout();
     ~process();
 };

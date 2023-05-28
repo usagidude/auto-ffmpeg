@@ -70,7 +70,7 @@ std::filesystem::path process::get_exe_directory()
 }
 
 process::process(const std::string& cmd, bool hide, bool redirect) :
-    _hProcess(nullptr), _hThread(nullptr),
+    _process_handle(nullptr), _thread_handle(nullptr),
     _cmd(cmd), _hide(hide), _redirect(redirect),
     _stdout_rd(nullptr), _stdout_wr(nullptr)
 {
@@ -103,35 +103,37 @@ void process::start()
         NULL, NULL, _redirect,
         _redirect ? 0:CREATE_NEW_CONSOLE,
         NULL, NULL, &start_info, &proc_info);
-    _hProcess = proc_info.hProcess;
-    _hThread = proc_info.hThread;
+    _process_handle = proc_info.hProcess;
+    _thread_handle = proc_info.hThread;
 }
 
 void process::wait_for_exit()
 {
-    if (_hProcess) {
-        WaitForSingleObject(_hProcess, INFINITE);
+    if (_process_handle) {
+        WaitForSingleObject(_process_handle, INFINITE);
     }
+}
+
+void process::run()
+{
+    start();
+    wait_for_exit();
 }
 
 std::string process::get_stdout()
 {
     __declspec(thread) static char stdout_buf[MAXINT16];
-    if (!_stdout_rd)
-        return std::string();
     DWORD r = 0;
-    if (ReadFile(_stdout_rd, stdout_buf, MAXINT16, &r, nullptr)) {
-
-    }
-    return std::string(stdout_buf, r);
+    if ((_stdout_rd != nullptr) && ReadFile(_stdout_rd, stdout_buf, MAXINT16, &r, nullptr))
+        return std::string(stdout_buf, r);
+    return "";
 }
-
 
 process::~process()
 {
-    if (_hProcess) {
-        CloseHandle(_hProcess);
-        CloseHandle(_hThread);
+    if (_process_handle) {
+        CloseHandle(_process_handle);
+        CloseHandle(_thread_handle);
     }
     if (_stdout_rd) {
         CloseHandle(_stdout_rd);

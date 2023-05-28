@@ -38,14 +38,9 @@ static std::string get_video_codec(const fs::path& input)
     process ffprobe(
         std::format("ffprobe \"{}\"", input.string()), false, true
     );
-    ffprobe.start();
-    ffprobe.wait_for_exit();
+    ffprobe.run();
     const auto output = ffprobe.get_stdout();
-    if (std::regex_search(output, m, vid_rx))
-        return m[1];
-    else
-        return "";
-
+    return std::regex_search(output, m, vid_rx) ? m[1] : std::string();
 }
 
 static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string>& config, bool local_exec = false)
@@ -67,8 +62,7 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
     }
     else {
         process ffmpeg(ffmpeg_cmd, config["window"] == "hide");
-        ffmpeg.start();
-        ffmpeg.wait_for_exit();
+        ffmpeg.run();
     }
 }
 
@@ -89,7 +83,6 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
             continue;
         if (!invcodec.empty() && invcodec != get_video_codec(file))
             continue;
-
         cmd_queues[wk_idx].push_back(file);
         wk_idx = (wk_idx + 1) % wk_cnt;
     }
