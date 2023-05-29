@@ -37,7 +37,6 @@ public:
     }
 };
 
-
 static std::map<std::string, std::string> load_config(const std::string& file)
 {
     std::map<std::string, std::string> out_map;
