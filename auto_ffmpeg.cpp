@@ -23,12 +23,6 @@ class concurrent_queue : public std::queue<T>
 private:
     std::mutex _lock;
 public:
-    void safe_push(const T& val)
-    {
-        _lock.lock();
-        this->push(val);
-        _lock.unlock();
-    }
     bool safe_pop(T& val)
     {
         _lock.lock();
