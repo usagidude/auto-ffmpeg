@@ -17,26 +17,6 @@
 
 namespace fs = std::filesystem;
 
-template<typename T>
-class concurrent_queue : public std::queue<T>
-{
-private:
-    std::mutex _lock;
-public:
-    bool safe_pop(T& val)
-    {
-        _lock.lock();
-        if (this->empty()) {
-            _lock.unlock();
-            return false;
-        }
-        val = this->front();
-        this->pop();
-        _lock.unlock();
-        return true;
-    }
-};
-
 static std::map<std::string, std::string> load_config(const std::string& file)
 {
     std::map<std::string, std::string> out_map;
@@ -94,7 +74,8 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
 
 static void batch_mode(std::map<std::string, std::string>& config, const fs::path& targetdir)
 {
-    concurrent_queue<fs::path> vid_files;
+    std::mutex queue_lock;
+    std::queue<fs::path> file_queue;
     std::vector<std::thread> cmd_workers;
     std::vector<std::string> exts;
 
@@ -104,18 +85,26 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
     for (const fs::path& file : fs::directory_iterator(targetdir)) {
         if (std::ranges::none_of(exts, [&](auto& ext) { return file.extension() == ext; }))
             continue;
-        vid_files.push(file);
+        file_queue.push(file);
     }
 
     for (int i = 0; i < std::stoi(config["count"]); ++i) {
         cmd_workers.emplace_back([&] {
             const auto& invcodec = config["invcodec"];
             for (;;) {
-                fs::path file;
-                if (!vid_files.safe_pop(file))
+                queue_lock.lock();
+                if (file_queue.empty()) {
+                    queue_lock.unlock();
                     break;
+                }
+
+                fs::path file = file_queue.front();
+                file_queue.pop();
+                queue_lock.unlock();
+
                 if (invcodec != "any" && get_video_codec(file) != invcodec)
                     continue;
+
                 exec_ffmpeg(file, config);
             }
         });
