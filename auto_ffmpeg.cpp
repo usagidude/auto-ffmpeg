@@ -11,9 +11,38 @@
 #include <filesystem>
 #include <regex>
 #include <format>
+#include <mutex>
+#include <queue>
 #include "process.h"
 
 namespace fs = std::filesystem;
+
+template<typename T>
+class concurrent_queue : public std::queue<T>
+{
+private:
+    std::mutex _lock;
+public:
+    void safe_push(const T& val)
+    {
+        _lock.lock();
+        this->push(val);
+        _lock.unlock();
+    }
+    bool safe_pop(T& val)
+    {
+        _lock.lock();
+        if (this->empty()) {
+            _lock.unlock();
+            return false;
+        }
+        val = this->front();
+        this->pop();
+        _lock.unlock();
+        return true;
+    }
+};
+
 
 static std::map<std::string, std::string> load_config(const std::string& file)
 {
@@ -72,29 +101,31 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
 
 static void batch_mode(std::map<std::string, std::string>& config, const fs::path& targetdir)
 {
-    auto wk_idx = 0, wk_cnt = std::stoi(config["count"]);
-    std::vector<std::vector<fs::path>> cmd_queues(wk_cnt);
+    concurrent_queue<fs::path> vid_files;
     std::vector<std::thread> cmd_workers;
     std::vector<std::string> exts;
-    std::string invcodec = config["invcodec"] == "any" ? "" : config["invcodec"];
 
     for (const auto& ext : std::views::split(config["inext"], '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
     for (const fs::path& file : fs::directory_iterator(targetdir)) {
-        if (std::ranges::none_of(exts, [&](auto& ext)
-            { return file.extension() == ext; }))
+        if (std::ranges::none_of(exts, [&](auto& ext) { return file.extension() == ext; }))
             continue;
-        if (!invcodec.empty() && invcodec != get_video_codec(file))
-            continue;
-        cmd_queues[wk_idx].push_back(file);
-        wk_idx = (wk_idx + 1) % wk_cnt;
+        vid_files.push(file);
     }
 
-    for (const auto& queue : cmd_queues) {
-        cmd_workers.emplace_back(
-            [&] { for (const auto& input : queue) exec_ffmpeg(input, config); }
-        );
+    for (int i = 0; i < std::stoi(config["count"]); ++i) {
+        cmd_workers.emplace_back([&] {
+            const auto& invcodec = config["invcodec"];
+            for (;;) {
+                fs::path file;
+                if (!vid_files.safe_pop(file))
+                    break;
+                if (invcodec != "any" && get_video_codec(file) != invcodec)
+                    continue;
+                exec_ffmpeg(file, config);
+            }
+        });
     }
 
     for (auto& t : cmd_workers)
