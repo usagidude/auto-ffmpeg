@@ -6,6 +6,7 @@
 #else
 #include <Windows.h>
 #endif
+#include <format>
 #include "process.h"
 
 #ifdef __gnu_linux__
@@ -75,11 +76,17 @@ process::process(const std::string& cmd, bool hide, bool redirect) :
     _stdout_rd(nullptr), _stdout_wr(nullptr)
 {
     if (redirect) {
+        auto pipe_name = std::format(R"(\\.\pipe\{})", GetCurrentThreadId());
         SECURITY_ATTRIBUTES sec_att{};
         sec_att.nLength = sizeof(SECURITY_ATTRIBUTES);
         sec_att.bInheritHandle = TRUE;
         sec_att.lpSecurityDescriptor = NULL;
-        CreatePipe(&_stdout_rd, &_stdout_wr, &sec_att, 0);
+        _stdout_rd = CreateNamedPipeA(
+            pipe_name.c_str(), PIPE_ACCESS_INBOUND | WRITE_DAC,
+            PIPE_NOWAIT, 1, MAXDWORD, MAXDWORD, 0, nullptr);
+        _stdout_wr = CreateFileA(
+            pipe_name.c_str(), GENERIC_WRITE, 0, &sec_att,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         SetHandleInformation(_stdout_rd, HANDLE_FLAG_INHERIT, 0);
     }
 }
@@ -122,10 +129,14 @@ void process::run()
 
 void process::get_stdout(std::string& out)
 {
-    __declspec(thread) static char stdout_buf[MAXINT16];
-    DWORD r = 0;
-    if ((_stdout_rd != nullptr) && ReadFile(_stdout_rd, stdout_buf, MAXINT16, &r, nullptr))
-        out.assign(stdout_buf, r);
+    DWORD r;
+    char stdout_buf[2048];
+    
+    if (_stdout_rd == nullptr)
+        return;
+
+    while (ReadFile(_stdout_rd, stdout_buf, 2048, &r, nullptr))
+        out.append(stdout_buf, r);
 }
 
 process::~process()

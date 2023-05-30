@@ -58,7 +58,7 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
     if (config["outext"] != "keep")
         output.replace_extension(config["outext"]);
 
-    auto ffmpeg_cmd = std::vformat(
+    const auto ffmpeg_cmd = std::vformat(
         config["cmd"],
         std::make_format_args(input.string(), output.string())
     );
@@ -76,20 +76,20 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
 {
     std::mutex queue_lock;
     std::queue<fs::path> file_queue;
-    std::vector<std::thread> cmd_workers;
+    std::vector<std::thread> workers;
     std::vector<std::string> exts;
 
     for (const auto& ext : std::views::split(config["inext"], '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
     for (const fs::path& file : fs::directory_iterator(targetdir)) {
-        if (std::ranges::none_of(exts, [&](auto& ext) { return file.extension() == ext; }))
+        if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
             continue;
         file_queue.push(file);
     }
 
     for (int i = 0; i < std::stoi(config["count"]); ++i) {
-        cmd_workers.emplace_back([&] {
+        workers.emplace_back([&] {
             const auto& invcodec = config["invcodec"];
             for (;;) {
                 queue_lock.lock();
@@ -98,7 +98,7 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
                     break;
                 }
 
-                fs::path file = file_queue.front();
+                const fs::path file = std::move(file_queue.front());
                 file_queue.pop();
                 queue_lock.unlock();
 
@@ -110,7 +110,7 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
         });
     }
 
-    for (auto& t : cmd_workers)
+    for (auto& t : workers)
         t.join();
 }
 
