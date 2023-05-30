@@ -93,7 +93,7 @@ process::process(const std::string& cmd, bool hide, bool redirect) :
         sec_att.lpSecurityDescriptor = NULL;
 
         _stdout_rd = CreateNamedPipeA(
-            pipe_name.c_str(), PIPE_ACCESS_INBOUND | WRITE_DAC,
+            pipe_name.c_str(), PIPE_ACCESS_INBOUND,
             PIPE_NOWAIT, 1, MAXDWORD, MAXDWORD, 0, nullptr);
         _stdout_wr = CreateFileA(
             pipe_name.c_str(), GENERIC_WRITE, 0, &sec_att,
