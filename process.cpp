@@ -76,7 +76,7 @@ process::process(const std::string& cmd, bool hide, bool redirect) :
     _stdout_rd(nullptr), _stdout_wr(nullptr)
 {
     if (redirect) {
-        auto pipe_name = std::format(R"(\\.\pipe\{})", GetCurrentThreadId());
+        auto pipe_name = std::format(R"(\\.\pipe\LOCAL\{})", GetCurrentThreadId());
         SECURITY_ATTRIBUTES sec_att{};
         sec_att.nLength = sizeof(SECURITY_ATTRIBUTES);
         sec_att.bInheritHandle = TRUE;
