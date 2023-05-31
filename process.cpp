@@ -5,6 +5,8 @@
 #include <array>
 #else
 #include <Windows.h>
+#include <rpcdce.h>
+#pragma warning( disable : 6031 )
 #endif
 #include <format>
 #include "process.h"
@@ -76,15 +78,19 @@ process::process(const std::string& cmd, bool hide, bool redirect) :
     _stdout_rd(nullptr), _stdout_wr(nullptr)
 {
     if (redirect) {
-        LARGE_INTEGER ticks;
         SECURITY_ATTRIBUTES sec_att{};
+        UUID uuid;
+        RPC_CSTR uuid_str;
+
+        UuidCreateSequential(&uuid);
+        UuidToStringA(&uuid, &uuid_str);
+
+        const std::string pipe_name = std::format(R"(\\.\pipe\LOCAL\{})", reinterpret_cast<char*>(uuid_str));
+        RpcStringFreeA(&uuid_str);
+
         sec_att.nLength = sizeof(SECURITY_ATTRIBUTES);
         sec_att.bInheritHandle = TRUE;
         sec_att.lpSecurityDescriptor = NULL;
-        
-        QueryPerformanceCounter(&ticks);
-        const std::string pipe_name(std::format(
-            R"(\\.\pipe\LOCAL\{})", std::to_string(ticks.QuadPart + rand())));
 
         _stdout_rd = CreateNamedPipeA(
             pipe_name.c_str(), PIPE_ACCESS_INBOUND,
