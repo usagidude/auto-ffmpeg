@@ -85,7 +85,9 @@ process::process(const std::string& cmd, bool hide, bool redirect) :
         UuidCreateSequential(&uuid);
         UuidToStringA(&uuid, &uuid_str);
 
-        const std::string pipe_name = std::format(R"(\\.\pipe\LOCAL\{})", reinterpret_cast<char*>(uuid_str));
+        const std::string pipe_name = 
+            std::format(R"(\\.\pipe\LOCAL\{})",
+                        reinterpret_cast<char*>(uuid_str));
         RpcStringFreeA(&uuid_str);
 
         sec_att.nLength = sizeof(SECURITY_ATTRIBUTES);
