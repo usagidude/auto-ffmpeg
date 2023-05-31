@@ -84,7 +84,7 @@ process::process(const std::string& cmd, bool hide, bool redirect) :
         
         QueryPerformanceCounter(&ticks);
         const std::string pipe_name(std::format(
-            R"(\\.\pipe\LOCAL\{})", std::to_string(ticks.QuadPart + rand())));
+            R"(\\.\pipe\LOCAL\{})", std::to_string(ticks.QuadPart) + std::to_string(rand())));
 
         _stdout_rd = CreateNamedPipeA(
             pipe_name.c_str(), PIPE_ACCESS_INBOUND,
