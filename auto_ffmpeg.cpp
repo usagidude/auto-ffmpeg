@@ -22,7 +22,7 @@ static std::map<std::string, std::string> load_config(const std::string& file)
     std::map<std::string, std::string> out_map;
     std::regex config_rx("^ *([a-z]+) *> *(.+)$");
 
-    std::ifstream config_file(process::get_exe_directory().append(file));
+    std::ifstream config_file(os::process::get_exe_directory().append(file));
     for (std::string line; std::getline(config_file, line);) {
         std::smatch m;
         std::regex_match(line, m, config_rx);
@@ -39,7 +39,7 @@ static std::string get_video_codec(const fs::path& input)
     std::smatch m;
     std::string output;
 
-    process ffprobe(
+    os::process ffprobe(
         std::format("ffprobe \"{}\"", input.string()),
         false, true
     );
@@ -67,7 +67,7 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
         std::system(ffmpeg_cmd.c_str());
     }
     else {
-        process ffmpeg(ffmpeg_cmd, config["window"] == "hide");
+        os::process ffmpeg(ffmpeg_cmd, config["window"] == "hide");
         ffmpeg.run();
     }
 }
@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
     auto config = load_config("config.txt");
 
     if (config["outmode"] == "local") {
-        config["outdir"] = process::get_exe_directory().append(config["outdir"]).string();
+        config["outdir"] = os::process::get_exe_directory().append(config["outdir"]).string();
     }
     else if (config["outmode"] == "source" && argc > 1) {
         fs::path inpath(argv[1]);
@@ -142,7 +142,7 @@ int main(int argc, char* argv[])
             exec_ffmpeg(argv[1], config, true);
     }
     else {
-        batch_mode(config, process::get_exe_directory());
+        batch_mode(config, os::process::get_exe_directory());
     }
 
     std::cout << "Done. Exiting in 60 seconds..." << std::endl;
