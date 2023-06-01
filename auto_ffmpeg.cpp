@@ -35,16 +35,14 @@ static std::map<std::string, std::string> load_config(const std::string& file)
 
 static std::string get_video_codec(const fs::path& input)
 {
+    __declspec(thread) static os::pipe pipe;
     std::regex vid_rx("Stream #0:0.+Video: ([a-z0-9]+)", std::regex_constants::icase);
     std::smatch m;
     std::string output;
 
-    os::process ffprobe(
-        std::format("ffprobe \"{}\"", input.string()),
-        false, true
-    );
-    ffprobe.run();
-    ffprobe.get_stdout(output);
+    os::process ffprobe(std::format("ffprobe \"{}\"", input.string()));
+    ffprobe.run(pipe);
+    pipe.read(output);
 
     return std::regex_search(output, m, vid_rx) ? m[1] : std::string();
 }

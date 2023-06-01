@@ -28,8 +28,8 @@ namespace os {
         void* _stdout_wr;
     public:
         pipe();
-        void* native_handle();
-        void read(std::string& out);
+        void* native_handle() const;
+        void read(std::string& out) const;
         ~pipe();
     };
     class process
@@ -37,19 +37,17 @@ namespace os {
     private:
         void* _process_handle;
         void* _thread_handle;
-        void* _stdout_rd;
-        void* _stdout_wr;
         std::string _cmd;
         bool _hide;
-        bool _redirect;
     public:
         static std::filesystem::path get_exe_path();
         static std::filesystem::path get_exe_directory();
-        process(const std::string& cmd, bool hide = false, bool redirect = false);
+        process(const std::string& cmd, bool hide = false);
         void start();
+        void start(const pipe& outpipe);
         void wait_for_exit();
         void run();
-        void get_stdout(std::string& out);
+        void run(const pipe& outpipe);
         ~process();
     };
 #endif

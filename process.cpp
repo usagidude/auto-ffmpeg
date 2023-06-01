@@ -74,53 +74,38 @@ namespace os {
         return get_exe_path().remove_filename();
     }
 
-    process::process(const std::string& cmd, bool hide, bool redirect) :
+    process::process(const std::string& cmd, bool hide) :
         _process_handle(nullptr), _thread_handle(nullptr),
-        _cmd(cmd), _hide(hide), _redirect(redirect),
-        _stdout_rd(nullptr), _stdout_wr(nullptr)
-    {
-        if (redirect) {
-            SECURITY_ATTRIBUTES sec_att{};
-            UUID uuid;
-            RPC_CSTR uuid_str;
-
-            UuidCreateSequential(&uuid);
-            UuidToStringA(&uuid, &uuid_str);
-
-            const std::string pipe_name = std::format(R"(\\.\pipe\LOCAL\{})", reinterpret_cast<char*>(uuid_str));
-            RpcStringFreeA(&uuid_str);
-
-            sec_att.nLength = sizeof(SECURITY_ATTRIBUTES);
-            sec_att.bInheritHandle = TRUE;
-
-            _stdout_rd = CreateNamedPipeA(
-                pipe_name.c_str(), PIPE_ACCESS_INBOUND,
-                PIPE_NOWAIT, 1, MAXDWORD, MAXDWORD, 0, nullptr);
-            _stdout_wr = CreateFileA(
-                pipe_name.c_str(), GENERIC_WRITE, 0, &sec_att,
-                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-            SetHandleInformation(_stdout_rd, HANDLE_FLAG_INHERIT, 0);
-        }
-    }
+        _cmd(cmd), _hide(hide) { }
 
     void process::start()
     {
         STARTUPINFOA start_info{};
         PROCESS_INFORMATION proc_info;
         start_info.cb = sizeof(start_info);
-        if (_redirect) {
-            start_info.hStdError = _stdout_wr;
-            start_info.hStdOutput = _stdout_wr;
-            start_info.hStdInput = INVALID_HANDLE_VALUE;
-            start_info.dwFlags = STARTF_USESTDHANDLES;
-        }
-        else if (_hide) {
+        if (_hide) {
             start_info.dwFlags = STARTF_USESHOWWINDOW;
             start_info.wShowWindow = SW_HIDE;
         }
         CreateProcessA(NULL, _cmd.data(),
-            NULL, NULL, _redirect,
-            _redirect ? 0 : CREATE_NEW_CONSOLE,
+            NULL, NULL, FALSE,
+            CREATE_NEW_CONSOLE,
+            NULL, NULL, &start_info, &proc_info);
+        _process_handle = proc_info.hProcess;
+        _thread_handle = proc_info.hThread;
+    }
+
+    void process::start(const pipe& outpipe)
+    {
+        STARTUPINFOA start_info{};
+        PROCESS_INFORMATION proc_info;
+        start_info.cb = sizeof(start_info);
+        start_info.hStdError = outpipe.native_handle();
+        start_info.hStdOutput = outpipe.native_handle();
+        start_info.hStdInput = INVALID_HANDLE_VALUE;
+        start_info.dwFlags = STARTF_USESTDHANDLES;
+        CreateProcessA(NULL, _cmd.data(),
+            NULL, NULL, TRUE, 0,
             NULL, NULL, &start_info, &proc_info);
         _process_handle = proc_info.hProcess;
         _thread_handle = proc_info.hThread;
@@ -139,16 +124,10 @@ namespace os {
         wait_for_exit();
     }
 
-    void process::get_stdout(std::string& out)
+    void process::run(const pipe& outpipe)
     {
-        DWORD r;
-        char stdout_buf[2048];
-
-        if (_stdout_rd == nullptr)
-            return;
-
-        while (ReadFile(_stdout_rd, stdout_buf, 2048, &r, nullptr))
-            out.append(stdout_buf, r);
+        start(outpipe);
+        wait_for_exit();
     }
 
     process::~process()
@@ -156,10 +135,6 @@ namespace os {
         if (_process_handle) {
             CloseHandle(_process_handle);
             CloseHandle(_thread_handle);
-        }
-        if (_stdout_rd) {
-            CloseHandle(_stdout_rd);
-            CloseHandle(_stdout_wr);
         }
     }
 
@@ -189,17 +164,29 @@ namespace os {
         SetHandleInformation(_stdout_rd, HANDLE_FLAG_INHERIT, 0);
     }
 
-    void* pipe::native_handle()
+    void* pipe::native_handle() const
     {
-        return nullptr;
+        return _stdout_wr;
     }
 
-    void pipe::read(std::string& out)
+    void pipe::read(std::string& out) const
     {
+        DWORD r;
+        char stdout_buf[2048];
+
+        if (_stdout_rd == nullptr)
+            return;
+
+        while (ReadFile(_stdout_rd, stdout_buf, 2048, &r, nullptr))
+            out.append(stdout_buf, r);
     }
 
     pipe::~pipe()
     {
+        if (_stdout_rd) {
+            CloseHandle(_stdout_rd);
+            CloseHandle(_stdout_wr);
+        }
     }
 
 #endif
