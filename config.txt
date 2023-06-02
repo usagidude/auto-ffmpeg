@@ -4,6 +4,7 @@ outdir>hevc
 outmode>source
 invcodec>h264
 inacodec>any
+inachan>any
 inext>.mkv|.mp4|.mov|.avi
 outext>keep
 window>show

@@ -17,7 +17,7 @@
 
 namespace fs = std::filesystem;
 
-enum class video_info
+enum class media_info
 {
     vcodec,
     acodec,
@@ -40,7 +40,7 @@ static std::map<std::string, std::string> load_config(const std::string& file)
     return out_map;
 }
 
-static std::string get_video_info(const fs::path& input, video_info info)
+static std::string get_media_info(const fs::path& input, media_info info)
 {
     __declspec(thread) static os::pipe out_pipe;
     std::regex vid_rx;
@@ -50,22 +50,22 @@ static std::string get_video_info(const fs::path& input, video_info info)
 
     switch (info)
     {
-    case video_info::vcodec:
-    case video_info::acodec:
+    case media_info::vcodec:
+    case media_info::acodec:
         vid_rx.assign("^codec_name=([a-z0-9]+)", std::regex_constants::icase);
         break;
-    case video_info::achan:
+    case media_info::achan:
         vid_rx.assign("^channels=([0-9])", std::regex_constants::icase);
         break;
     }
 
     switch (info)
     {
-    case video_info::vcodec:
+    case media_info::vcodec:
         stream.assign("v:0");
         break;
-    case video_info::acodec:
-    case video_info::achan:
+    case media_info::acodec:
+    case media_info::achan:
         stream.assign("a:0");
         break;
     }
@@ -124,6 +124,8 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
     for (int i = 0; i < std::stoi(config["count"]); ++i) {
         workers.emplace_back([&] {
             const auto& invcodec = config["invcodec"];
+            const auto& inacodec = config["inacodec"];
+            const auto& inachan = config["inachan"];
             for (;;) {
                 queue_lock.lock();
                 if (file_queue.empty()) {
@@ -135,7 +137,11 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
                 file_queue.pop();
                 queue_lock.unlock();
 
-                if (invcodec != "any" && get_video_info(file, video_info::vcodec) != invcodec)
+                if (invcodec != "any" && get_media_info(file, media_info::vcodec) != invcodec)
+                    continue;
+                if (inacodec != "any" && get_media_info(file, media_info::acodec) != inacodec)
+                    continue;
+                if (inachan != "any" && get_media_info(file, media_info::achan) != inachan)
                     continue;
 
                 exec_ffmpeg(file, config);

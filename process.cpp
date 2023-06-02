@@ -149,7 +149,7 @@ namespace os {
             PIPE_NOWAIT, 1, MAXDWORD, MAXDWORD, 0, nullptr);
         _stdout_wr = CreateFileA(
             pipe_name.c_str(), GENERIC_WRITE, 0, &sec_att,
-            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         SetHandleInformation(_stdout_rd, HANDLE_FLAG_INHERIT, 0);
     }
 
@@ -169,6 +169,11 @@ namespace os {
         while (ReadFile(_stdout_rd, stdout_buf, 2048, &r, nullptr))
             out.append(stdout_buf, r);
     }
+    
+    pipe::operator void* () const
+    {
+        return _stdout_wr;
+    }
 
     pipe::~pipe()
     {
@@ -176,11 +181,6 @@ namespace os {
             CloseHandle(_stdout_rd);
             CloseHandle(_stdout_wr);
         }
-    }
-
-    pipe::operator void* () const
-    {
-        return _stdout_wr;
     }
 
 #endif
