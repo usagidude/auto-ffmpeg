@@ -1,0 +1,35 @@
+cmd>
+Full ffmpeg command, use "{}" as placeholders for the input and output file
+
+count>
+Max number of ffmpeg processes to run in parallel
+
+outdir>
+Name of the output directory
+
+outmode>
+local: outdir is created in the same directory as auto-ffmpeg.exe
+source: outdir is created in the same directory as the input files
+absolute: ourdir is a fully qualified path (ex. C:\stuff\myvids)
+
+infilter>
+Filters input files by applying a regex string match to the filename. Use infilter>. for no filter
+
+invcodec>
+Filters input files by video codec name. Use invcodec>any for no filter
+
+inacodec>
+Filters input files by audio codec name. Use inacodec>any for no filter
+
+inachan>
+Filters input files by audio channel count. Use inachan>any for no filter
+
+inext>
+Filters input files by file extension. Separate extensions with the pipe character |
+
+outext>
+File extension used for the output files. Use outext>keep to keep the same extension as the input file.
+
+window>
+show: shows each ffmpeg window
+hide: hides all ffmpeg windows
