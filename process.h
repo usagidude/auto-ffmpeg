@@ -31,6 +31,7 @@ namespace os {
         void* native_handle() const;
         void read(std::string& out) const;
         ~pipe();
+        operator void*() const;
     };
     class process
     {
@@ -39,15 +40,13 @@ namespace os {
         void* _thread_handle;
         std::string _cmd;
         bool _hide;
+        void init(const std::string& cmd, void* out_pipe);
     public:
         static std::filesystem::path get_exe_path();
         static std::filesystem::path get_exe_directory();
         process(const std::string& cmd, bool hide = false);
-        void start();
-        void start(const pipe& outpipe);
-        void wait_for_exit();
-        void run();
-        void run(const pipe& outpipe);
+        process(const std::string& cmd, void* out_pipe);
+        void wait_for_exit() const;
         ~process();
     };
 #endif

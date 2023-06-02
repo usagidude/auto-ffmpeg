@@ -35,14 +35,14 @@ static std::map<std::string, std::string> load_config(const std::string& file)
 
 static std::string get_video_codec(const fs::path& input)
 {
-    __declspec(thread) static os::pipe pipe;
+    __declspec(thread) static os::pipe out_pipe;
     std::regex vid_rx("Stream #0:0.+Video: ([a-z0-9]+)", std::regex_constants::icase);
     std::smatch m;
     std::string output;
 
-    os::process ffprobe(std::format("ffprobe \"{}\"", input.string()));
-    ffprobe.run(pipe);
-    pipe.read(output);
+    os::process ffprobe(std::format("ffprobe \"{}\"", input.string()), out_pipe);
+    ffprobe.wait_for_exit();
+    out_pipe.read(output);
 
     return std::regex_search(output, m, vid_rx) ? m[1] : std::string();
 }
@@ -66,7 +66,7 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
     }
     else {
         os::process ffmpeg(ffmpeg_cmd, config["window"] == "hide");
-        ffmpeg.run();
+        ffmpeg.wait_for_exit();
     }
 }
 
@@ -108,8 +108,8 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
         });
     }
 
-    for (auto& t : workers)
-        t.join();
+    for (auto& worker : workers)
+        worker.join();
 }
 
 int main(int argc, char* argv[])

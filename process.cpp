@@ -62,6 +62,7 @@ namespace os {
     }
 #else
 
+
     std::filesystem::path process::get_exe_path()
     {
         std::string exe(MAX_PATH, 0);
@@ -74,60 +75,48 @@ namespace os {
         return get_exe_path().remove_filename();
     }
 
-    process::process(const std::string& cmd, bool hide) :
-        _process_handle(nullptr), _thread_handle(nullptr),
-        _cmd(cmd), _hide(hide) { }
-
-    void process::start()
+    void process::init(const std::string& cmd, void* out_pipe)
     {
         STARTUPINFOA start_info{};
         PROCESS_INFORMATION proc_info;
         start_info.cb = sizeof(start_info);
-        if (_hide) {
+        if (out_pipe) {
+            start_info.hStdError = out_pipe;
+            start_info.hStdOutput = out_pipe;
+            start_info.hStdInput = INVALID_HANDLE_VALUE;
+            start_info.dwFlags = STARTF_USESTDHANDLES;
+        }
+        else if (_hide) {
             start_info.dwFlags = STARTF_USESHOWWINDOW;
             start_info.wShowWindow = SW_HIDE;
         }
         CreateProcessA(NULL, _cmd.data(),
-            NULL, NULL, FALSE,
-            CREATE_NEW_CONSOLE,
+            NULL, NULL, out_pipe ? TRUE : FALSE,
+            out_pipe ? 0 : CREATE_NEW_CONSOLE,
             NULL, NULL, &start_info, &proc_info);
         _process_handle = proc_info.hProcess;
         _thread_handle = proc_info.hThread;
     }
 
-    void process::start(const pipe& outpipe)
+    process::process(const std::string& cmd, bool hide) :
+        _process_handle(nullptr), _thread_handle(nullptr),
+        _cmd(cmd), _hide(hide)
     {
-        STARTUPINFOA start_info{};
-        PROCESS_INFORMATION proc_info;
-        start_info.cb = sizeof(start_info);
-        start_info.hStdError = outpipe.native_handle();
-        start_info.hStdOutput = outpipe.native_handle();
-        start_info.hStdInput = INVALID_HANDLE_VALUE;
-        start_info.dwFlags = STARTF_USESTDHANDLES;
-        CreateProcessA(NULL, _cmd.data(),
-            NULL, NULL, TRUE, 0,
-            NULL, NULL, &start_info, &proc_info);
-        _process_handle = proc_info.hProcess;
-        _thread_handle = proc_info.hThread;
+        init(cmd, nullptr);
     }
 
-    void process::wait_for_exit()
+    process::process(const std::string& cmd, void* out_pipe) :
+        _process_handle(nullptr), _thread_handle(nullptr),
+        _cmd(cmd), _hide(false)
+    {
+        init(cmd, out_pipe);
+    }
+
+    void process::wait_for_exit() const
     {
         if (_process_handle) {
             WaitForSingleObject(_process_handle, INFINITE);
         }
-    }
-
-    void process::run()
-    {
-        start();
-        wait_for_exit();
-    }
-
-    void process::run(const pipe& outpipe)
-    {
-        start(outpipe);
-        wait_for_exit();
     }
 
     process::~process()
@@ -187,6 +176,11 @@ namespace os {
             CloseHandle(_stdout_rd);
             CloseHandle(_stdout_wr);
         }
+    }
+
+    pipe::operator void* () const
+    {
+        return _stdout_wr;
     }
 
 #endif
