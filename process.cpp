@@ -63,16 +63,16 @@ namespace os {
 #else
 
 
-    std::filesystem::path process::get_exe_path()
+    std::filesystem::path this_process::path()
     {
         std::string exe(MAX_PATH, 0);
         GetModuleFileNameA(nullptr, exe.data(), MAX_PATH);
         return exe;
     }
 
-    std::filesystem::path process::get_exe_directory()
+    std::filesystem::path this_process::directory()
     {
-        return get_exe_path().remove_filename();
+        return path().remove_filename();
     }
 
     void process::init(const std::string& cmd, void* out_pipe)

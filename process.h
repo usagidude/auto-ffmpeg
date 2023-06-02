@@ -21,6 +21,14 @@ namespace os {
     };
 
 #else
+
+    class this_process
+    {
+    public:
+        static std::filesystem::path path();
+        static std::filesystem::path directory();
+    };
+
     class pipe
     {
     private:
@@ -33,6 +41,7 @@ namespace os {
         ~pipe();
         operator void*() const;
     };
+
     class process
     {
     private:
@@ -42,8 +51,6 @@ namespace os {
         bool _hide;
         void init(const std::string& cmd, void* out_pipe);
     public:
-        static std::filesystem::path get_exe_path();
-        static std::filesystem::path get_exe_directory();
         process(const std::string& cmd, bool hide = false);
         process(const std::string& cmd, void* out_pipe);
         void wait_for_exit() const;

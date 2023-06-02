@@ -29,7 +29,7 @@ static std::map<std::string, std::string> load_config(const std::string& file)
     std::map<std::string, std::string> out_map;
     std::regex config_rx("^ *([a-z]+) *> *(.+)$");
 
-    std::ifstream config_file(os::process::get_exe_directory().append(file));
+    std::ifstream config_file(os::this_process::directory().append(file));
     for (std::string line; std::getline(config_file, line);) {
         std::smatch m;
         std::regex_match(line, m, config_rx);
@@ -82,17 +82,17 @@ static std::string get_media_info(const fs::path& input, media_info info)
     return std::regex_search(output, m, vid_rx) ? m[1] : std::string();
 }
 
-static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string>& config, bool local_exec = false)
+static void exec_ffmpeg(const fs::path& input, const std::map<std::string, std::string>& config, bool local_exec = false)
 {
-    fs::path output(config["outdir"]);
+    fs::path output(config.at("outdir"));
 
     output.append(input.filename().string());
 
-    if (config["outext"] != "keep")
-        output.replace_extension(config["outext"]);
+    if (config.at("outext") != "keep")
+        output.replace_extension(config.at("outext"));
 
     const auto ffmpeg_cmd = std::vformat(
-        config["cmd"],
+        config.at("cmd"),
         std::make_format_args(input.string(), output.string())
     );
 
@@ -100,32 +100,30 @@ static void exec_ffmpeg(const fs::path& input, std::map<std::string, std::string
         std::system(ffmpeg_cmd.c_str());
     }
     else {
-        os::process ffmpeg(ffmpeg_cmd, config["window"] == "hide");
+        os::process ffmpeg(ffmpeg_cmd, config.at("window") == "hide");
         ffmpeg.wait_for_exit();
     }
 }
 
-static void batch_mode(std::map<std::string, std::string>& config, const fs::path& targetdir)
+static void batch_mode(const std::map<std::string, std::string>& config, const fs::path& targetdir)
 {
     std::mutex queue_lock;
     std::queue<fs::path> file_queue;
     std::vector<std::thread> workers;
     std::vector<std::string> exts;
 
-    for (const auto& ext : std::views::split(config["inext"], '|'))
+    for (const auto& ext : std::views::split(config.at("inext"), '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
-    for (const fs::path& file : fs::directory_iterator(targetdir)) {
-        if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
-            continue;
-        file_queue.push(file);
-    }
+    for (const fs::path& file : fs::directory_iterator(targetdir))
+        if (std::ranges::any_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
+            file_queue.push(file);
 
-    for (int i = 0; i < std::stoi(config["count"]); ++i) {
+    for (int i = 0; i < std::stoi(config.at("count")); ++i) {
         workers.emplace_back([&] {
-            const auto& invcodec = config["invcodec"];
-            const auto& inacodec = config["inacodec"];
-            const auto& inachan = config["inachan"];
+            const auto& invcodec = config.at("invcodec");
+            const auto& inacodec = config.at("inacodec");
+            const auto& inachan = config.at("inachan");
             for (;;) {
                 queue_lock.lock();
                 if (file_queue.empty()) {
@@ -158,7 +156,7 @@ int main(int argc, char* argv[])
     auto config = load_config("config.txt");
 
     if (config["outmode"] == "local") {
-        config["outdir"] = os::process::get_exe_directory().append(config["outdir"]).string();
+        config["outdir"] = os::this_process::directory().append(config["outdir"]).string();
     }
     else if (config["outmode"] == "source" && argc > 1) {
         fs::path inpath(argv[1]);
@@ -181,7 +179,7 @@ int main(int argc, char* argv[])
             exec_ffmpeg(argv[1], config, true);
     }
     else {
-        batch_mode(config, os::process::get_exe_directory());
+        batch_mode(config, os::this_process::directory());
     }
 
     std::cout << "Done. Exiting in 60 seconds..." << std::endl;
