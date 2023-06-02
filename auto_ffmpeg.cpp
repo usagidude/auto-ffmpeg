@@ -43,7 +43,7 @@ static std::map<std::string, std::string> load_config(const std::string& file)
 static std::string get_media_info(const fs::path& input, media_info info)
 {
     __declspec(thread) static os::pipe out_pipe;
-    std::regex vid_rx;
+    std::regex rx;
     std::smatch m;
     std::string stream;
     std::string output;
@@ -52,10 +52,10 @@ static std::string get_media_info(const fs::path& input, media_info info)
     {
     case media_info::vcodec:
     case media_info::acodec:
-        vid_rx.assign("^codec_name=([a-z0-9]+)", std::regex_constants::icase);
+        rx.assign("^codec_name=([a-z0-9]+)", std::regex_constants::icase);
         break;
     case media_info::achan:
-        vid_rx.assign("^channels=([0-9])", std::regex_constants::icase);
+        rx.assign("^channels=([0-9])", std::regex_constants::icase);
         break;
     }
 
@@ -79,7 +79,7 @@ static std::string get_media_info(const fs::path& input, media_info info)
     ffprobe.wait_for_exit();
     out_pipe.read(output);
 
-    return std::regex_search(output, m, vid_rx) ? m[1] : std::string();
+    return std::regex_search(output, m, rx) ? m[1] : std::string();
 }
 
 static void exec_ffmpeg(const fs::path& input, const std::map<std::string, std::string>& config, bool local_exec = false)
