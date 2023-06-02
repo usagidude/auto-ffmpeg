@@ -2,7 +2,7 @@ cmd>ffmpeg -y -hide_banner -hwaccel cuda -i "{}" -c:v hevc_nvenc -preset:v p7 -r
 count>3
 outdir>hevc
 outmode>source
-infilter>*
+infilter>.
 invcodec>h264
 inacodec>any
 inachan>any

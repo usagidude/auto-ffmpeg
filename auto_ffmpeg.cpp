@@ -119,7 +119,7 @@ static void batch_mode(const std::map<std::string, std::string>& config, const f
     for (const fs::path& file : fs::directory_iterator(targetdir)) {
         if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
             continue;
-        if (config.at("infilter") != "*" && !std::regex_search(file.string(), filter))
+        if (config.at("infilter") != "." && !std::regex_search(file.string(), filter))
             continue;
         file_queue.push(file);
     }
