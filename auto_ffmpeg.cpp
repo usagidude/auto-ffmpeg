@@ -17,6 +17,13 @@
 
 namespace fs = std::filesystem;
 
+enum class video_info
+{
+    vcodec,
+    acodec,
+    achan
+};
+
 static std::map<std::string, std::string> load_config(const std::string& file)
 {
     std::map<std::string, std::string> out_map;
@@ -33,14 +40,42 @@ static std::map<std::string, std::string> load_config(const std::string& file)
     return out_map;
 }
 
-static std::string get_video_codec(const fs::path& input)
+static std::string get_video_info(const fs::path& input, video_info info)
 {
     __declspec(thread) static os::pipe out_pipe;
-    std::regex vid_rx("Stream #0:0.+Video: ([a-z0-9]+)", std::regex_constants::icase);
+    std::regex vid_rx;
     std::smatch m;
+    std::string stream;
     std::string output;
 
-    os::process ffprobe(std::format("ffprobe \"{}\"", input.string()), out_pipe);
+    switch (info)
+    {
+    case video_info::vcodec:
+    case video_info::acodec:
+        vid_rx.assign("^codec_name=([a-z0-9]+)", std::regex_constants::icase);
+        break;
+    case video_info::achan:
+        vid_rx.assign("^channels=([0-9])", std::regex_constants::icase);
+        break;
+    }
+
+    switch (info)
+    {
+    case video_info::vcodec:
+        stream.assign("v:0");
+        break;
+    case video_info::acodec:
+    case video_info::achan:
+        stream.assign("a:0");
+        break;
+    }
+
+    os::process ffprobe(
+        std::format(
+            "ffprobe -hide_banner -i \"{}\" -show_streams -select_streams {}",
+            input.string(), stream),
+        out_pipe
+    );
     ffprobe.wait_for_exit();
     out_pipe.read(output);
 
@@ -100,7 +135,7 @@ static void batch_mode(std::map<std::string, std::string>& config, const fs::pat
                 file_queue.pop();
                 queue_lock.unlock();
 
-                if (invcodec != "any" && get_video_codec(file) != invcodec)
+                if (invcodec != "any" && get_video_info(file, video_info::vcodec) != invcodec)
                     continue;
 
                 exec_ffmpeg(file, config);
