@@ -24,22 +24,6 @@ enum class media_info
     achan
 };
 
-static std::map<std::string, std::string> load_config(const std::string& file)
-{
-    std::map<std::string, std::string> out_map;
-    std::regex config_rx("^ *([a-z]+) *> *(.+)$");
-
-    std::ifstream config_file(os::this_process::directory().append(file));
-    for (std::string line; std::getline(config_file, line);) {
-        std::smatch m;
-        std::regex_match(line, m, config_rx);
-        out_map.emplace(m[1], m[2]);
-    }
-    config_file.close();
-
-    return out_map;
-}
-
 static std::string get_media_info(const fs::path& input, media_info info)
 {
     __declspec(thread) static os::pipe out_pipe;
@@ -82,9 +66,56 @@ static std::string get_media_info(const fs::path& input, media_info info)
     return std::regex_search(output, m, rx) ? m[1] : std::string();
 }
 
-static void exec_ffmpeg(const fs::path& input, const std::map<std::string, std::string>& config, bool local_exec = false)
+static fs::path create_outdir(const std::map<std::string, std::string>& config, const fs::path& input)
 {
-    fs::path output(config.at("outdir"));
+    static std::mutex fs_mtx;
+    static fs::path single_path;
+
+    fs_mtx.lock();
+    if (!single_path.empty()) {
+        fs_mtx.unlock();
+        return single_path;
+    }
+
+    if (config.at("outmode") == "local") {
+        single_path = os::this_process::directory().append(config.at("outdir")).string();
+    }
+    else if (config.at("outmode") == "source" && std::stoi(config.at("argc")) > 1) {
+        fs::path inpath(config.at("argv"));
+        if (fs::is_directory(inpath))
+            inpath.append(config.at("outdir"));
+        else
+            inpath.replace_filename(config.at("outdir"));
+        single_path = inpath;
+    }
+    else if (config.at("outmode") == "absolute") {
+        single_path = config.at("outdir");
+    }
+    else if (config.at("outmode") == "recursive") {
+        fs::path output;
+        output.assign(input);
+        output.replace_filename(config.at("outdir"));
+        if (!fs::exists(output))
+            fs::create_directory(output);
+        fs_mtx.unlock();
+        return output;
+    }
+
+    if (!single_path.empty()) {
+        if (!fs::exists(single_path))
+            fs::create_directory(single_path);
+    }
+
+    fs_mtx.unlock();
+    return single_path;
+}
+
+static void exec_ffmpeg(
+    const fs::path& input,
+    const std::map<std::string, std::string>& config,
+    bool local_exec = false)
+{
+    auto output = create_outdir(config, input);
 
     output.append(input.filename().string());
 
@@ -105,7 +136,27 @@ static void exec_ffmpeg(const fs::path& input, const std::map<std::string, std::
     }
 }
 
-static void batch_mode(const std::map<std::string, std::string>& config, const fs::path& targetdir)
+static void recursive_directory_walk(
+    const fs::path& dir,
+    const std::vector<std::string>& exts,
+    const std::map<std::string, std::string>& config,
+    const std::regex& filter,
+    std::queue<fs::path>& queue)
+{
+    for (const fs::path& file : fs::directory_iterator(dir)) {
+        if (fs::is_directory(file) && file.filename() != config.at("outdir"))
+            recursive_directory_walk(file, exts, config, filter, queue);
+        if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
+            continue;
+        if (config.at("infilter") != "." && !std::regex_search(file.string(), filter))
+            continue;
+        queue.push(file);
+    }
+}
+
+static void batch_mode(
+    const std::map<std::string, std::string>& config,
+    const fs::path& targetdir)
 {
     std::mutex queue_lock;
     std::queue<fs::path> file_queue;
@@ -116,14 +167,17 @@ static void batch_mode(const std::map<std::string, std::string>& config, const f
     for (const auto& ext : std::views::split(config.at("inext"), '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
-    for (const fs::path& file : fs::directory_iterator(targetdir)) {
-        if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
-            continue;
-        if (config.at("infilter") != "." && !std::regex_search(file.string(), filter))
-            continue;
-        file_queue.push(file);
-    }
-
+    if (config.at("outmode") != "recursive")
+        for (const fs::path& file : fs::directory_iterator(targetdir)) {
+            if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
+                continue;
+            if (config.at("infilter") != "." && !std::regex_search(file.string(), filter))
+                continue;
+            file_queue.push(file);
+        }
+    else
+        recursive_directory_walk(targetdir, exts, config, filter, file_queue);
+    
     for (int i = 0; i < std::stoi(config.at("count")); ++i) {
         workers.emplace_back([&] {
             const auto& invcodec = config.at("invcodec");
@@ -156,24 +210,28 @@ static void batch_mode(const std::map<std::string, std::string>& config, const f
         worker.join();
 }
 
+static std::map<std::string, std::string> load_config(const std::string& file)
+{
+    std::map<std::string, std::string> out_map;
+    std::regex config_rx("^ *([a-z]+) *> *(.+)$");
+
+    std::ifstream config_file(os::this_process::directory().append(file));
+    for (std::string line; std::getline(config_file, line);) {
+        std::smatch m;
+        std::regex_match(line, m, config_rx);
+        out_map.emplace(m[1], m[2]);
+    }
+    config_file.close();
+
+    return out_map;
+}
+
 int main(int argc, char* argv[])
 {
     auto config = load_config("config.txt");
 
-    if (config["outmode"] == "local") {
-        config["outdir"] = os::this_process::directory().append(config["outdir"]).string();
-    }
-    else if (config["outmode"] == "source" && argc > 1) {
-        fs::path inpath(argv[1]);
-        if (fs::is_directory(argv[1]))
-            inpath.append(config["outdir"]);
-        else
-            inpath.replace_filename(config["outdir"]);
-        config["outdir"] = inpath.string();
-    }
-
-    if (!fs::exists(config["outdir"]))
-        fs::create_directory(config["outdir"]);
+    config.emplace("argc", std::to_string(argc));
+    config.emplace("argv", argc > 1 ? argv[1] : "");
 
     std::cout << "Working..." << std::endl;
 
