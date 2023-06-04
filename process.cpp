@@ -146,7 +146,7 @@ namespace os {
 
         _stdout_rd = CreateNamedPipeA(
             pipe_name.c_str(), PIPE_ACCESS_INBOUND,
-            PIPE_NOWAIT, 1, MAXDWORD, MAXDWORD, 0, nullptr);
+            PIPE_NOWAIT, 1, 1 << 26, 1 << 26, 0, nullptr);
         _stdout_wr = CreateFileA(
             pipe_name.c_str(), GENERIC_WRITE, 0, &sec_att,
             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -161,13 +161,13 @@ namespace os {
     void pipe::read(std::string& out) const
     {
         DWORD r;
-        char stdout_buf[2048];
+        char buffer[2048];
 
         if (_stdout_rd == nullptr)
             return;
 
-        while (ReadFile(_stdout_rd, stdout_buf, 2048, &r, nullptr))
-            out.append(stdout_buf, r);
+        while (ReadFile(_stdout_rd, buffer, 2048, &r, nullptr))
+            out.append(buffer, r);
     }
     
     pipe::operator void* () const

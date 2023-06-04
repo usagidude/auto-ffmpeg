@@ -112,7 +112,7 @@ static void batch_mode(const std::map<std::string, std::string>& config, const f
     std::vector<std::thread> workers;
     std::vector<std::string> exts;
     std::regex filter(config.at("infilter"), std::regex_constants::icase);
-
+    
     for (const auto& ext : std::views::split(config.at("inext"), '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
