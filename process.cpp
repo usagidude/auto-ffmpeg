@@ -65,7 +65,9 @@ namespace os {
 
     std::filesystem::path this_process::path()
     {
-        std::string exe(MAX_PATH, 0);
+        __declspec(thread) static std::string exe(MAX_PATH, 0);
+        if (!exe.starts_with("\0"))
+            return exe;
         GetModuleFileNameA(nullptr, exe.data(), MAX_PATH);
         return exe;
     }

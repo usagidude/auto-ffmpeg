@@ -17,6 +17,8 @@
 
 namespace fs = std::filesystem;
 
+typedef std::map<std::string, std::string> config_map;
+
 enum class media_info
 {
     vcodec,
@@ -66,21 +68,23 @@ static std::string get_media_info(const fs::path& input, media_info info)
     return std::regex_search(output, m, rx) ? m[1] : std::string();
 }
 
-static fs::path create_outdir(const std::map<std::string, std::string>& config, const fs::path& input)
+static auto create_outdir(const config_map& config, const fs::path& input)
 {
     static std::mutex fs_mtx;
     static fs::path single_path;
 
     fs_mtx.lock();
+
     if (!single_path.empty()) {
         fs_mtx.unlock();
         return single_path;
     }
 
-    if (config.at("outmode") == "local") {
-        single_path = os::this_process::directory().append(config.at("outdir")).string();
+    if (config.at("outmode") == "local" ||
+        (config.at("outmode") == "source" && config.at("argv").empty())) {
+        single_path = os::this_process::directory().append(config.at("outdir"));
     }
-    else if (config.at("outmode") == "source" && std::stoi(config.at("argc")) > 1) {
+    else if (config.at("outmode") == "source") {
         fs::path inpath(config.at("argv"));
         if (fs::is_directory(inpath))
             inpath.append(config.at("outdir"));
@@ -91,12 +95,39 @@ static fs::path create_outdir(const std::map<std::string, std::string>& config, 
     else if (config.at("outmode") == "absolute") {
         single_path = config.at("outdir");
     }
-    else if (config.at("outmode") == "recursive") {
+    else if (config.at("outmode") == "rsource") {
         fs::path output;
+
         output.assign(input);
         output.replace_filename(config.at("outdir"));
         if (!fs::exists(output))
             fs::create_directory(output);
+
+        fs_mtx.unlock();
+        return output;
+    }
+    else if (config.at("outmode") == "rlocal" || config.at("outmode") == "rabsolute") {
+        fs::path inroot = config.at("argv").empty() ?
+            os::this_process::directory().string() :
+            config.at("argv");
+
+        if (!fs::is_directory(inroot))
+            inroot.remove_filename();
+
+        std::string outtail(input.string().substr(inroot.string().size()));
+        if (outtail.starts_with("\\"))
+            outtail = outtail.substr(1);
+
+        fs::path output = config.at("outmode") == "rlocal" ?
+            os::this_process::directory().append(config.at("outdir")) :
+            config.at("outdir");
+        
+        output.append(outtail);
+        output.remove_filename();
+
+        if (!fs::exists(output))
+            fs::create_directories(output);
+
         fs_mtx.unlock();
         return output;
     }
@@ -110,10 +141,7 @@ static fs::path create_outdir(const std::map<std::string, std::string>& config, 
     return single_path;
 }
 
-static void exec_ffmpeg(
-    const fs::path& input,
-    const std::map<std::string, std::string>& config,
-    bool local_exec = false)
+static void exec_ffmpeg(const fs::path& input, const config_map& config, bool local_exec = false)
 {
     auto output = create_outdir(config, input);
 
@@ -139,7 +167,7 @@ static void exec_ffmpeg(
 static void recursive_directory_walk(
     const fs::path& dir,
     const std::vector<std::string>& exts,
-    const std::map<std::string, std::string>& config,
+    const config_map& config,
     const std::regex& filter,
     std::queue<fs::path>& queue)
 {
@@ -154,9 +182,7 @@ static void recursive_directory_walk(
     }
 }
 
-static void batch_mode(
-    const std::map<std::string, std::string>& config,
-    const fs::path& targetdir)
+static void batch_mode(const config_map& config, const fs::path& targetdir)
 {
     std::mutex queue_lock;
     std::queue<fs::path> file_queue;
@@ -167,7 +193,7 @@ static void batch_mode(
     for (const auto& ext : std::views::split(config.at("inext"), '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
-    if (config.at("outmode") != "recursive")
+    if (!config.at("outmode").starts_with("r"))
         for (const fs::path& file : fs::directory_iterator(targetdir)) {
             if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
                 continue;
@@ -210,9 +236,9 @@ static void batch_mode(
         worker.join();
 }
 
-static std::map<std::string, std::string> load_config(const std::string& file)
+static auto load_config(const std::string& file)
 {
-    std::map<std::string, std::string> out_map;
+    config_map out_map;
     std::regex config_rx("^ *([a-z]+) *> *(.+)$");
 
     std::ifstream config_file(os::this_process::directory().append(file));
