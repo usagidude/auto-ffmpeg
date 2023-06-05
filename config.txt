@@ -8,4 +8,5 @@ inacodec>any
 inachan>any
 inext>.mkv|.mp4|.mov|.avi
 outext>keep
+resume>true
 window>show

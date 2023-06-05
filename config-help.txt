@@ -36,6 +36,12 @@ Filters input files by file extension. Separate extensions with the pipe charact
 outext>
 File extension used for the output files. Use outext>keep to keep the same extension as the input file.
 
+resume>
+Enables saving batch conversion progress. Allowing the batch conversion to be resumed upon next launch
+[options]
+true
+false
+
 window>
 show: shows each ffmpeg window
 hide: hides all ffmpeg windows

@@ -13,6 +13,7 @@
 #include <format>
 #include <mutex>
 #include <queue>
+#include <set>
 #include "process.h"
 
 namespace fs = std::filesystem;
@@ -66,6 +67,35 @@ static std::string get_media_info(const fs::path& input, media_info info)
     out_pipe.read(output);
 
     return std::regex_search(output, m, rx) ? m[1] : std::string();
+}
+
+static auto load_progress()
+{
+    std::set<std::string> prog;
+    const fs::path prog_path = os::this_process::directory().append("progress.txt");
+    if (!fs::exists(prog_path))
+        return prog;
+    std::ifstream prog_file(prog_path);
+    for (std::string line; std::getline(prog_file, line);) {
+        prog.emplace(line);
+    }
+    prog_file.close();
+    return prog;
+}
+
+static void save_progress(const fs::path& file)
+{
+    static std::mutex fs_mtx;
+
+    fs_mtx.lock();
+
+    std::ofstream prog_file(
+        os::this_process::directory().append("progress.txt"),
+        std::ios::app);
+    prog_file << file.string() << std::endl;
+    prog_file.close();
+
+    fs_mtx.unlock();
 }
 
 static auto create_outdir(const config_map& config, const fs::path& input)
@@ -134,7 +164,7 @@ static auto create_outdir(const config_map& config, const fs::path& input)
 
     if (!single_path.empty()) {
         if (!fs::exists(single_path))
-            fs::create_directory(single_path);
+            fs::create_directories(single_path);
     }
 
     fs_mtx.unlock();
@@ -182,7 +212,7 @@ static void recursive_directory_walk(
     }
 }
 
-static void batch_mode(const config_map& config, const fs::path& targetdir)
+static void batch_mode(const config_map& config, const std::set<std::string>& progress, const fs::path& targetdir)
 {
     std::mutex queue_lock;
     std::queue<fs::path> file_queue;
@@ -206,6 +236,7 @@ static void batch_mode(const config_map& config, const fs::path& targetdir)
     
     for (int i = 0; i < std::stoi(config.at("count")); ++i) {
         workers.emplace_back([&] {
+            const bool resume = config.at("resume") == "true";
             const auto& invcodec = config.at("invcodec");
             const auto& inacodec = config.at("inacodec");
             const auto& inachan = config.at("inachan");
@@ -220,6 +251,8 @@ static void batch_mode(const config_map& config, const fs::path& targetdir)
                 file_queue.pop();
                 queue_lock.unlock();
 
+                if (resume && progress.contains(file.string()))
+                    continue;
                 if (invcodec != "any" && get_media_info(file, media_info::vcodec) != invcodec)
                     continue;
                 if (inacodec != "any" && get_media_info(file, media_info::acodec) != inacodec)
@@ -228,6 +261,8 @@ static void batch_mode(const config_map& config, const fs::path& targetdir)
                     continue;
 
                 exec_ffmpeg(file, config);
+                if (resume)
+                    save_progress(file);
             }
         });
     }
@@ -255,6 +290,7 @@ static auto load_config(const std::string& file)
 int main(int argc, char* argv[])
 {
     auto config = load_config("config.txt");
+    auto progress = load_progress();
 
     config.emplace("argc", std::to_string(argc));
     config.emplace("argv", argc > 1 ? argv[1] : "");
@@ -263,12 +299,12 @@ int main(int argc, char* argv[])
 
     if (argc > 1) {
         if (fs::is_directory(argv[1]))
-            batch_mode(config, argv[1]);
+            batch_mode(config, progress, argv[1]);
         else
             exec_ffmpeg(argv[1], config, true);
     }
     else {
-        batch_mode(config, os::this_process::directory());
+        batch_mode(config, progress, os::this_process::directory());
     }
 
     std::cout << "Done. Exiting in 60 seconds..." << std::endl;
