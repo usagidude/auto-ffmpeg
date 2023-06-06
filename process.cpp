@@ -2,106 +2,244 @@
 #include <unistd.h>
 #include <spawn.h>
 #include <sys/wait.h>
-#include <array>
+#include <uuid/uuid.h>
 #else
 #include <Windows.h>
+#include <rpcdce.h>
+#pragma warning( disable : 6031 )
 #endif
+#include <array>
+#include <vector>
+#include <sstream>
+#include <fstream>
+#include <format>
 #include "process.h"
+
+namespace os {
 
 #ifdef __gnu_linux__
 
-std::filesystem::path process::get_exe_path()
-{
-    return std::filesystem::canonical("/proc/self/exe");
-}
-
-std::filesystem::path process::get_exe_directory()
-{
-    return std::filesystem::path(get_exe_path()).remove_filename();
-}
-
-process::process(const std::string& cmd, bool hide) :
-    _pid(0), _cmd(cmd), _hide(hide) {}
-
-void process::start()
-{
-    posix_spawnattr_t spawn_att;
-    std::array<std::string, 3> argv_buf{
-      "sh",
-      "-c",
-      _cmd + " 0>/dev/null 1>/dev/null 2>/dev/null"
-    };
-    std::array<char*, 4> argv{
-      argv_buf[0].data(),
-      argv_buf[1].data(),
-      argv_buf[2].data(),
-      nullptr
-    };
-    posix_spawnattr_init(&spawn_att);
-    posix_spawnattr_setflags(&spawn_att, POSIX_SPAWN_SETSID);
-    posix_spawnp(&_pid, argv[0], nullptr, &spawn_att, argv.data(), environ);
-    posix_spawnattr_destroy(&spawn_att);
-
-}
-
-void process::wait_for_exit()
-{
-    int status;
-    if (_pid) {
-        waitpid(_pid, &status, 0);
+    std::filesystem::path this_process::path()
+    {
+        return std::filesystem::canonical("/proc/self/exe");
     }
-}
 
-process::~process()
-{
-}
+    std::filesystem::path this_process::directory()
+    {
+        return path().remove_filename();
+    }
+
+    void process::init(const std::string& cmd, void* out_pipe)
+    {
+        posix_spawnattr_t spawn_att;
+        std::vector<std::string> argv_buf {
+            "sh",
+            "-c"
+        };
+        if (out_pipe) {
+            auto cmd = _cmd;
+            cmd.append(" 0>/dev/null 1>");
+            cmd.append(reinterpret_cast<char*>(out_pipe));
+            cmd.append(" 2>/dev/null");
+            argv_buf.push_back(cmd);
+        }
+        else {
+            argv_buf.push_back(_cmd + " 0>/dev/null 1>/dev/null 2>/dev/null");
+        }
+        std::array<char*, 4> argv{
+            argv_buf[0].data(),
+            argv_buf[1].data(),
+            argv_buf[2].data(),
+            nullptr
+        };
+        posix_spawnattr_init(&spawn_att);
+        posix_spawnattr_setflags(&spawn_att, POSIX_SPAWN_SETSID);
+        posix_spawnp(&_pid, argv[0], nullptr, &spawn_att, argv.data(), environ);
+        posix_spawnattr_destroy(&spawn_att);
+    }
+
+    process::process(const std::string& cmd, bool hide) :
+        _pid(0), _cmd(cmd), _hide(hide)
+    {
+        init(cmd, nullptr);
+    }
+
+    process::process(const std::string& cmd, void* out_pipe) :
+        _pid(0), _cmd(cmd), _hide(false)
+    {
+        init(cmd, out_pipe);
+    }
+
+    void process::wait_for_exit() const
+    {
+        int status;
+        if (_pid) {
+            waitpid(_pid, &status, 0);
+        }
+    }
+
+    process::~process()
+    {
+    }
+
+    ipipe::ipipe()
+    {
+        uuid_t uuid;
+        char uuid_str[37];
+        uuid_generate(uuid);
+        uuid_unparse_lower(uuid, uuid_str);
+        _pipe = this_process::directory().append(uuid_str).string();
+    }
+
+    void* ipipe::native_handle() const
+    {
+        return reinterpret_cast<void*>(const_cast<char*>(_pipe.c_str()));
+    }
+
+    void ipipe::read(std::string& out) const
+    {
+        std::stringstream ss;
+        std::ifstream pipe_file(_pipe);
+        ss << pipe_file.rdbuf();
+        pipe_file.close();
+        out.assign(ss.str());
+    }
+
+    ipipe::operator void* () const
+    {
+        return native_handle();
+    }
+
+    ipipe::~ipipe()
+    {
+        std::filesystem::remove(_pipe);
+    }
+
 #else
 
-std::filesystem::path process::get_exe_path()
-{
-    std::string exe(MAX_PATH, 0);
-    GetModuleFileNameA(nullptr, exe.data(), MAX_PATH);
-    return exe;
-}
 
-std::filesystem::path process::get_exe_directory()
-{
-    return std::filesystem::path(get_exe_path()).remove_filename();
-}
-
-process::process(const std::string& cmd, bool hide) :
-    _hProcess(nullptr), _hThread(nullptr),
-    _cmd(cmd), _hide(hide) {}
-
-void process::start()
-{
-    STARTUPINFOA start_info = {};
-    PROCESS_INFORMATION proc_info;
-    start_info.cb = sizeof(start_info);
-    if (_hide) {
-        start_info.dwFlags = STARTF_USESHOWWINDOW;
-        start_info.wShowWindow = SW_HIDE;
+    std::filesystem::path this_process::path()
+    {
+        static thread_local std::string exe(MAX_PATH, 0);
+        if (!exe.starts_with("\0"))
+            return exe;
+        GetModuleFileNameA(nullptr, exe.data(), MAX_PATH);
+        return exe;
     }
-    CreateProcessA(NULL, _cmd.data(),
-        NULL, NULL, FALSE,
-        CREATE_NEW_CONSOLE,
-        NULL, NULL, &start_info, &proc_info);
-    _hProcess = proc_info.hProcess;
-    _hThread = proc_info.hThread;
-}
 
-void process::wait_for_exit()
-{
-    if (_hProcess) {
-        WaitForSingleObject(_hProcess, INFINITE);
+    std::filesystem::path this_process::directory()
+    {
+        return path().remove_filename();
     }
-}
 
-process::~process()
-{
-    if (_hProcess) {
-        CloseHandle(_hProcess);
-        CloseHandle(_hThread);
+    void process::init(const std::string& cmd, void* out_pipe)
+    {
+        STARTUPINFOA start_info{};
+        PROCESS_INFORMATION proc_info;
+        start_info.cb = sizeof(start_info);
+        if (out_pipe) {
+            start_info.hStdError = out_pipe;
+            start_info.hStdOutput = out_pipe;
+            start_info.hStdInput = INVALID_HANDLE_VALUE;
+            start_info.dwFlags = STARTF_USESTDHANDLES;
+        }
+        else if (_hide) {
+            start_info.dwFlags = STARTF_USESHOWWINDOW;
+            start_info.wShowWindow = SW_HIDE;
+        }
+        CreateProcessA(NULL, _cmd.data(),
+            NULL, NULL, out_pipe ? TRUE : FALSE,
+            out_pipe ? 0 : CREATE_NEW_CONSOLE,
+            NULL, NULL, &start_info, &proc_info);
+        _process_handle = proc_info.hProcess;
+        _thread_handle = proc_info.hThread;
     }
-}
+
+    process::process(const std::string& cmd, bool hide) :
+        _process_handle(nullptr), _thread_handle(nullptr),
+        _cmd(cmd), _hide(hide)
+    {
+        init(cmd, nullptr);
+    }
+
+    process::process(const std::string& cmd, void* out_pipe) :
+        _process_handle(nullptr), _thread_handle(nullptr),
+        _cmd(cmd), _hide(false)
+    {
+        init(cmd, out_pipe);
+    }
+
+    void process::wait_for_exit() const
+    {
+        if (_process_handle) {
+            WaitForSingleObject(_process_handle, INFINITE);
+        }
+    }
+
+    process::~process()
+    {
+        if (_process_handle) {
+            CloseHandle(_process_handle);
+            CloseHandle(_thread_handle);
+        }
+    }
+
+    ipipe::ipipe() : _stdout_rd(nullptr), _stdout_wr(nullptr)
+    {
+        SECURITY_ATTRIBUTES sec_att{};
+        UUID uuid;
+        RPC_CSTR uuid_str;
+
+        UuidCreateSequential(&uuid);
+        UuidToStringA(&uuid, &uuid_str);
+
+        const std::string pipe_name = 
+            std::format(R"(\\.\pipe\LOCAL\{})",
+                        reinterpret_cast<char*>(uuid_str));
+        RpcStringFreeA(&uuid_str);
+
+        sec_att.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sec_att.bInheritHandle = TRUE;
+
+        _stdout_rd = CreateNamedPipeA(
+            pipe_name.c_str(), PIPE_ACCESS_INBOUND,
+            PIPE_NOWAIT, 1, 1 << 26, 1 << 26, 0, nullptr);
+        _stdout_wr = CreateFileA(
+            pipe_name.c_str(), GENERIC_WRITE, 0, &sec_att,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        SetHandleInformation(_stdout_rd, HANDLE_FLAG_INHERIT, 0);
+    }
+
+    void* ipipe::native_handle() const
+    {
+        return _stdout_wr;
+    }
+
+    void ipipe::read(std::string& out) const
+    {
+        DWORD r;
+        char buffer[2048];
+
+        if (_stdout_rd == nullptr)
+            return;
+
+        while (ReadFile(_stdout_rd, buffer, 2048, &r, nullptr))
+            out.append(buffer, r);
+    }
+    
+    ipipe::operator void* () const
+    {
+        return _stdout_wr;
+    }
+
+    ipipe::~ipipe()
+    {
+        if (_stdout_rd) {
+            CloseHandle(_stdout_rd);
+            CloseHandle(_stdout_wr);
+        }
+    }
+
 #endif
+
+}

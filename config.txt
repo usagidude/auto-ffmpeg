@@ -1,7 +1,10 @@
-cmd>ffmpeg -y -hide_banner -hwaccel cuda -i "{}" -c:v hevc_nvenc -preset:v p7 -rc vbr -cq 0 -qmin:v 22 -qmax:v 27 -multipass 2 -spatial-aq 1 -aq-strength 5 -rc-lookahead 20 -b:v 1M -bufsize 512k -c:a copy -c:s copy -map 0:v:0 -map 0:a? -map 0:s? "{}"
+cmd>ffmpeg -n -hide_banner -hwaccel cuda -i "{}" -c:v hevc_nvenc -preset:v p7 -rc vbr -cq 0 -qmin:v 22 -qmax:v 27 -multipass 2 -spatial-aq 1 -aq-strength 5 -rc-lookahead 20 -b:v 1M -bufsize 512k -c:a copy -c:s copy -map 0:v:0 -map 0:a? -map 0:s? -strict -2 "{}"
 count>3
 outdir>hevc
 outmode>source
+infilter>.
+probe_match>v:0;^codec_name=h264|a:0;^codec_name=aac;^channels=2
 inext>.mkv|.mp4|.mov|.avi
-outext>.mkv
+outext>keep
+resume>false
 window>show
