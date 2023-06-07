@@ -93,7 +93,7 @@ namespace os {
 
     void* ipipe::native_handle() const
     {
-        return reinterpret_cast<void*>(const_cast<char*>(_pipe.c_str()));
+        return const_cast<char*>(_pipe.c_str());
     }
 
     void ipipe::read(std::string& out) const
