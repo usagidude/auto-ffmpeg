@@ -125,10 +125,9 @@ static auto create_outdir(const config_map& config, const fs::path& input)
         single_path = config.at("outdir");
     }
     else if (config.at("outmode") == "rsource") {
-        fs::path output;
-
-        output.assign(input);
+        fs::path output(input);
         output.replace_filename(config.at("outdir"));
+
         if (!fs::exists(output))
             fs::create_directory(output);
 
@@ -136,23 +135,22 @@ static auto create_outdir(const config_map& config, const fs::path& input)
         return output;
     }
     else if (config.at("outmode") == "rlocal" || config.at("outmode") == "rabsolute") {
-        fs::path inroot = config.at("argv").empty() ?
-            os::this_process::directory().string() :
-            config.at("argv");
+        auto inroot = config.at("argv").empty() ?
+            os::this_process::directory() :
+            fs::path(config.at("argv"));
 
         if (!fs::is_directory(inroot))
             inroot.remove_filename();
 
-        std::string outtail(input.string().substr(inroot.string().size()));
+        std::string outtail(input.string().substr(inroot.native().size()));
         if (outtail.starts_with("\\"))
             outtail = outtail.substr(1);
 
-        fs::path output = config.at("outmode") == "rlocal" ?
+        auto output = config.at("outmode") == "rlocal" ?
             os::this_process::directory().append(config.at("outdir")) :
             fs::path(config.at("outdir"));
         
-        output.append(outtail);
-        output.remove_filename();
+        output.append(outtail).remove_filename();
 
         if (!fs::exists(output))
             fs::create_directories(output);
@@ -161,10 +159,8 @@ static auto create_outdir(const config_map& config, const fs::path& input)
         return output;
     }
 
-    if (!single_path.empty()) {
-        if (!fs::exists(single_path))
-            fs::create_directories(single_path);
-    }
+    if (!single_path.empty() && !fs::exists(single_path))
+        fs::create_directories(single_path);
 
     fs_mtx.unlock();
     return single_path;
@@ -200,15 +196,15 @@ static void batch_mode(const config_map& config, const fs::path& targetdir)
     std::queue<fs::path> file_queue;
     std::vector<std::thread> workers;
     std::vector<std::string> exts;
-    const std::set<std::string> progress = load_progress();
     const std::regex filter(config.at("infilter"), std::regex_constants::icase);
     const bool recursive = config.at("outmode").starts_with("r");
+    const auto progress = load_progress();
 
     for (const auto& ext : std::views::split(config.at("inext"), '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
-    std::function<void(const fs::path&)> get_media_files = [&](const fs::path& next) {
-        for (const fs::path& path : fs::directory_iterator(next)) {
+    const std::function<void(const fs::path&)> get_media_files = [&](const auto& dir) {
+        for (const fs::path& path : fs::directory_iterator(dir)) {
             if (recursive && fs::is_directory(path) && path.filename() != config.at("outdir"))
                 get_media_files(path);
             if (std::ranges::none_of(exts, [&](const auto& ext) { return path.extension() == ext; }))
