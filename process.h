@@ -48,10 +48,10 @@ namespace os {
         int _pid;
         std::string _cmd;
         bool _hide;
-        void init(char* out_pipe);
+        void init(char* stdout_pipe);
     public:
         process(const std::string& cmd, bool hide = false);
-        process(const std::string& cmd, char* out_pipe);
+        process(const std::string& cmd, char* stdout_pipe);
         void wait_for_exit() const;
         ~process();
     };
@@ -85,10 +85,10 @@ namespace os {
         void* _thread_handle;
         std::string _cmd;
         bool _hide;
-        void init(void* out_pipe);
+        void init(void* stdout_pipe);
     public:
         process(const std::string& cmd, bool hide = false);
-        process(const std::string& cmd, void* out_pipe);
+        process(const std::string& cmd, void* stdout_pipe);
         void wait_for_exit() const;
         ~process();
     };

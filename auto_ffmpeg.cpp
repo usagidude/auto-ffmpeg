@@ -15,12 +15,13 @@
 #include <queue>
 #include <set>
 #include <utility>
+#include <functional>
 #include "process.h"
 
 namespace fs = std::filesystem;
 
 typedef std::map<std::string, std::string> config_map;
-typedef std::pair<std::vector<std::regex>, std::string> probe_match_section;
+typedef std::pair<std::string, std::vector<std::regex>> probe_match_section;
 
 static auto get_probe_matchlist(const config_map& config)
 {
@@ -41,26 +42,26 @@ static auto get_probe_matchlist(const config_map& config)
             }
             rx_strs.emplace_back(sub_str.begin(), sub_str.end(), std::regex_constants::icase);
         }
-        probe_matchlist.emplace_back(rx_strs, stream);
+        probe_matchlist.emplace_back(stream, rx_strs);
     }
 
     return probe_matchlist;
 }
 
-static auto exec_ffprobe_match(const fs::path& input, const std::vector<probe_match_section>& ffprobe_rx_list)
+static auto exec_ffprobe_match(const fs::path& input, const std::vector<probe_match_section>& match_sections)
 {
     static thread_local os::ipipe inbound_pipe;
-    for (const auto& list : ffprobe_rx_list) {
+    for (const auto& section : match_sections) {
         std::string output;
         os::process ffprobe(
             std::format(
                 "ffprobe -hide_banner -i \"{}\" -show_streams -select_streams {}",
-                input.string(), list.second),
+                input.string(), section.first),
             inbound_pipe
         );
         ffprobe.wait_for_exit();
         inbound_pipe.read(output);
-        for (const auto& rx : list.first)
+        for (const auto& rx : section.second)
             if (!std::regex_search(output, rx))
                 return false;
     }
@@ -147,8 +148,8 @@ static auto create_outdir(const config_map& config, const fs::path& input)
             outtail = outtail.substr(1);
 
         fs::path output = config.at("outmode") == "rlocal" ?
-            os::this_process::directory().append(config.at("outdir")).string() :
-            config.at("outdir");
+            os::this_process::directory().append(config.at("outdir")) :
+            fs::path(config.at("outdir"));
         
         output.append(outtail);
         output.remove_filename();
@@ -193,24 +194,6 @@ static void exec_ffmpeg(const fs::path& input, const config_map& config, bool lo
     }
 }
 
-static void recursive_directory_walk(
-    const fs::path& dir,
-    const std::vector<std::string>& exts,
-    const config_map& config,
-    const std::regex& filter,
-    std::queue<fs::path>& queue)
-{
-    for (const fs::path& file : fs::directory_iterator(dir)) {
-        if (fs::is_directory(file) && file.filename() != config.at("outdir"))
-            recursive_directory_walk(file, exts, config, filter, queue);
-        if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
-            continue;
-        if (config.at("infilter") != "." && !std::regex_search(file.string(), filter))
-            continue;
-        queue.push(file);
-    }
-}
-
 static void batch_mode(const config_map& config, const std::set<std::string>& progress, const fs::path& targetdir)
 {
     std::mutex queue_lock;
@@ -218,20 +201,23 @@ static void batch_mode(const config_map& config, const std::set<std::string>& pr
     std::vector<std::thread> workers;
     std::vector<std::string> exts;
     std::regex filter(config.at("infilter"), std::regex_constants::icase);
-    
+    const bool recursive = config.at("outmode").starts_with("r");
+
     for (const auto& ext : std::views::split(config.at("inext"), '|'))
         exts.emplace_back(ext.begin(), ext.end());
 
-    if (!config.at("outmode").starts_with("r"))
-        for (const fs::path& file : fs::directory_iterator(targetdir)) {
-            if (std::ranges::none_of(exts, [&](const auto& ext) { return file.extension() == ext; }))
+    std::function<void(const fs::path&)> get_media_files = [&](const fs::path& next) {
+        for (const fs::path& path : fs::directory_iterator(next)) {
+            if (recursive && fs::is_directory(path) && path.filename() != config.at("outdir"))
+                get_media_files(path);
+            if (std::ranges::none_of(exts, [&](const auto& ext) { return path.extension() == ext; }))
                 continue;
-            if (config.at("infilter") != "." && !std::regex_search(file.string(), filter))
+            if (config.at("infilter") != "." && !std::regex_search(path.string(), filter))
                 continue;
-            file_queue.push(file);
+            file_queue.push(path);
         }
-    else
-        recursive_directory_walk(targetdir, exts, config, filter, file_queue);
+    };
+    get_media_files(targetdir);
     
     for (int i = 0; i < std::stoi(config.at("count")); ++i) {
         workers.emplace_back([&] {

@@ -27,7 +27,7 @@ namespace os {
         return path().remove_filename();
     }
 
-    void process::init(char* out_pipe)
+    void process::init(char* stdout_pipe)
     {
         posix_spawnattr_t spawn_att;
 
@@ -38,7 +38,7 @@ namespace os {
         };
 
         argv_buf[2].append(" 0>/dev/null 1>");
-        argv_buf[2].append(out_pipe ? out_pipe : "/dev/null");
+        argv_buf[2].append(stdout_pipe ? stdout_pipe : "/dev/null");
         argv_buf[2].append(" 2>/dev/null");
 
         std::array<char*, 4> argv{
@@ -60,10 +60,10 @@ namespace os {
         init(nullptr);
     }
 
-    process::process(const std::string& cmd, char* out_pipe) :
+    process::process(const std::string& cmd, char* stdout_pipe) :
         _pid(0), _cmd(cmd), _hide(false)
     {
-        init(out_pipe);
+        init(stdout_pipe);
     }
 
     void process::wait_for_exit() const
@@ -126,14 +126,14 @@ namespace os {
         return path().remove_filename();
     }
 
-    void process::init(void* out_pipe)
+    void process::init(void* stdout_pipe)
     {
         STARTUPINFOA start_info{};
         PROCESS_INFORMATION proc_info;
         start_info.cb = sizeof(start_info);
-        if (out_pipe) {
-            start_info.hStdError = out_pipe;
-            start_info.hStdOutput = out_pipe;
+        if (stdout_pipe) {
+            start_info.hStdError = stdout_pipe;
+            start_info.hStdOutput = stdout_pipe;
             start_info.hStdInput = INVALID_HANDLE_VALUE;
             start_info.dwFlags = STARTF_USESTDHANDLES;
         }
@@ -142,8 +142,8 @@ namespace os {
             start_info.wShowWindow = SW_HIDE;
         }
         CreateProcessA(NULL, _cmd.data(),
-            NULL, NULL, out_pipe ? TRUE : FALSE,
-            out_pipe ? 0 : CREATE_NEW_CONSOLE,
+            NULL, NULL, stdout_pipe ? TRUE : FALSE,
+            stdout_pipe ? 0 : CREATE_NEW_CONSOLE,
             NULL, NULL, &start_info, &proc_info);
         _process_handle = proc_info.hProcess;
         _thread_handle = proc_info.hThread;
@@ -156,11 +156,11 @@ namespace os {
         init(nullptr);
     }
 
-    process::process(const std::string& cmd, void* out_pipe) :
+    process::process(const std::string& cmd, void* stdout_pipe) :
         _process_handle(nullptr), _thread_handle(nullptr),
         _cmd(cmd), _hide(false)
     {
-        init(out_pipe);
+        init(stdout_pipe);
     }
 
     void process::wait_for_exit() const
