@@ -36,10 +36,10 @@ namespace os {
         std::string _pipe;
     public:
         ipipe();
-        void* native_handle() const;
+        char* native_handle() const;
         void read(std::string& out) const;
         ~ipipe();
-        operator void* () const;
+        operator char* () const;
     };
 
     class process
@@ -48,10 +48,10 @@ namespace os {
         int _pid;
         std::string _cmd;
         bool _hide;
-        void init(const std::string& cmd, void* out_pipe);
+        void init(char* out_pipe);
     public:
         process(const std::string& cmd, bool hide = false);
-        process(const std::string& cmd, void* out_pipe);
+        process(const std::string& cmd, char* out_pipe);
         void wait_for_exit() const;
         ~process();
     };
@@ -85,7 +85,7 @@ namespace os {
         void* _thread_handle;
         std::string _cmd;
         bool _hide;
-        void init(const std::string& cmd, void* out_pipe);
+        void init(void* out_pipe);
     public:
         process(const std::string& cmd, bool hide = false);
         process(const std::string& cmd, void* out_pipe);

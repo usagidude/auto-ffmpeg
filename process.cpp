@@ -9,7 +9,6 @@
 #pragma warning( disable : 6031 )
 #endif
 #include <array>
-#include <vector>
 #include <fstream>
 #include <format>
 #include "process.h"
@@ -28,29 +27,27 @@ namespace os {
         return path().remove_filename();
     }
 
-    void process::init(const std::string& cmd, void* out_pipe)
+    void process::init(char* out_pipe)
     {
         posix_spawnattr_t spawn_att;
-        std::vector<std::string> argv_buf {
+
+        std::array<std::string, 3> argv_buf {
             "sh",
-            "-c"
+            "-c",
+            _cmd
         };
-        if (out_pipe) {
-            auto cmd = _cmd;
-            cmd.append(" 0>/dev/null 1>");
-            cmd.append(reinterpret_cast<char*>(out_pipe));
-            cmd.append(" 2>/dev/null");
-            argv_buf.push_back(cmd);
-        }
-        else {
-            argv_buf.push_back(_cmd + " 0>/dev/null 1>/dev/null 2>/dev/null");
-        }
+
+        argv_buf[2].append(" 0>/dev/null 1>");
+        argv_buf[2].append(out_pipe ? out_pipe : "/dev/null");
+        argv_buf[2].append(" 2>/dev/null");
+
         std::array<char*, 4> argv{
             argv_buf[0].data(),
             argv_buf[1].data(),
             argv_buf[2].data(),
             nullptr
         };
+
         posix_spawnattr_init(&spawn_att);
         posix_spawnattr_setflags(&spawn_att, POSIX_SPAWN_SETSID);
         posix_spawnp(&_pid, argv[0], nullptr, &spawn_att, argv.data(), environ);
@@ -60,13 +57,13 @@ namespace os {
     process::process(const std::string& cmd, bool hide) :
         _pid(0), _cmd(cmd), _hide(hide)
     {
-        init(cmd, nullptr);
+        init(nullptr);
     }
 
-    process::process(const std::string& cmd, void* out_pipe) :
+    process::process(const std::string& cmd, char* out_pipe) :
         _pid(0), _cmd(cmd), _hide(false)
     {
-        init(cmd, out_pipe);
+        init(out_pipe);
     }
 
     void process::wait_for_exit() const
@@ -90,7 +87,7 @@ namespace os {
         _pipe = this_process::directory().append(uuid_str).string();
     }
 
-    void* ipipe::native_handle() const
+    char* ipipe::native_handle() const
     {
         return const_cast<char*>(_pipe.c_str());
     }
@@ -102,7 +99,7 @@ namespace os {
         pipe_file.close();
     }
 
-    ipipe::operator void* () const
+    ipipe::operator char* () const
     {
         return native_handle();
     }
@@ -129,7 +126,7 @@ namespace os {
         return path().remove_filename();
     }
 
-    void process::init(const std::string& cmd, void* out_pipe)
+    void process::init(void* out_pipe)
     {
         STARTUPINFOA start_info{};
         PROCESS_INFORMATION proc_info;
@@ -156,14 +153,14 @@ namespace os {
         _process_handle(nullptr), _thread_handle(nullptr),
         _cmd(cmd), _hide(hide)
     {
-        init(cmd, nullptr);
+        init(nullptr);
     }
 
     process::process(const std::string& cmd, void* out_pipe) :
         _process_handle(nullptr), _thread_handle(nullptr),
         _cmd(cmd), _hide(false)
     {
-        init(cmd, out_pipe);
+        init(out_pipe);
     }
 
     void process::wait_for_exit() const
