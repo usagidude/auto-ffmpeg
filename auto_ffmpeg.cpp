@@ -194,13 +194,14 @@ static void exec_ffmpeg(const fs::path& input, const config_map& config, bool lo
     }
 }
 
-static void batch_mode(const config_map& config, const std::set<std::string>& progress, const fs::path& targetdir)
+static void batch_mode(const config_map& config, const fs::path& targetdir)
 {
     std::mutex queue_lock;
     std::queue<fs::path> file_queue;
     std::vector<std::thread> workers;
     std::vector<std::string> exts;
-    std::regex filter(config.at("infilter"), std::regex_constants::icase);
+    const std::set<std::string> progress = load_progress();
+    const std::regex filter(config.at("infilter"), std::regex_constants::icase);
     const bool recursive = config.at("outmode").starts_with("r");
 
     for (const auto& ext : std::views::split(config.at("inext"), '|'))
@@ -269,7 +270,6 @@ static auto load_config(const std::string& file)
 int main(int argc, char* argv[])
 {
     auto config = load_config("config.txt");
-    auto progress = load_progress();
 
     config.emplace("argc", std::to_string(argc));
     config.emplace("argv", argc > 1 ? argv[1] : "");
@@ -278,12 +278,12 @@ int main(int argc, char* argv[])
 
     if (argc > 1) {
         if (fs::is_directory(argv[1]))
-            batch_mode(config, progress, argv[1]);
+            batch_mode(config, argv[1]);
         else
             exec_ffmpeg(argv[1], config, true);
     }
     else {
-        batch_mode(config, progress, os::this_process::directory());
+        batch_mode(config, os::this_process::directory());
     }
 
     std::cout << "Done. Exiting in 60 seconds..." << std::endl;
