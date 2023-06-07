@@ -10,7 +10,6 @@
 #endif
 #include <array>
 #include <vector>
-#include <sstream>
 #include <fstream>
 #include <format>
 #include "process.h"
@@ -98,11 +97,9 @@ namespace os {
 
     void ipipe::read(std::string& out) const
     {
-        std::stringstream ss;
         std::ifstream pipe_file(_pipe);
-        ss << pipe_file.rdbuf();
+        std::getline(pipe_file, out, '\0');
         pipe_file.close();
-        out.assign(ss.str());
     }
 
     ipipe::operator void* () const
