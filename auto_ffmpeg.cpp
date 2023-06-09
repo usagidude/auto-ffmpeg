@@ -142,6 +142,19 @@ private:
         return true;
     }
 
+    void get_media_files(const fs::path& dir, std::queue<fs::path>& file_queue) const
+    {
+        for (const fs::path& path : fs::directory_iterator(dir)) {
+            if (recursive && fs::is_directory(path) && path.filename() != outdir)
+                get_media_files(path, file_queue);
+            if (!inexts.contains(path.extension()))
+                continue;
+            if (filter_by_name && !std::regex_search(path.string(), infilter))
+                continue;
+            file_queue.push(path);
+        }
+    }
+
 public:
     auto_ffmpeg(const std::string& file, const char* argv, int argc) :
         config_t(file, argv, argc) { }
@@ -175,18 +188,7 @@ public:
         std::vector<std::thread> workers;
         const auto progress = load_progress();
 
-        const std::function<void(const fs::path&)> get_media_files = [&](const auto& dir) {
-            for (const fs::path& path : fs::directory_iterator(dir)) {
-                if (recursive && fs::is_directory(path) && path.filename() != outdir)
-                    get_media_files(path);
-                if (!inexts.contains(path.extension()))
-                    continue;
-                if (filter_by_name && !std::regex_search(path.string(), infilter))
-                    continue;
-                file_queue.push(path);
-            }
-        };
-        get_media_files(targetdir);
+        get_media_files(targetdir, file_queue);
 
         for (int i = 0; i < count; ++i) {
             workers.emplace_back([&] {
