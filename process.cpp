@@ -34,12 +34,8 @@ namespace os {
         std::array<std::string, 3> argv_buf {
             "sh",
             "-c",
-            _cmd
+            std::format("{} 0>/dev/null 1>{} 2>/dev/null", _cmd, stdout_pipe ? stdout_pipe : "/dev/null")
         };
-
-        argv_buf[2].append(" 0>/dev/null 1>");
-        argv_buf[2].append(stdout_pipe ? stdout_pipe : "/dev/null");
-        argv_buf[2].append(" 2>/dev/null");
 
         std::array<char*, 4> argv{
             argv_buf[0].data(),
