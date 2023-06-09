@@ -16,7 +16,7 @@
 #include <set>
 #include <utility>
 #include <functional>
-#include "process.h"
+#include "os.h"
 #include "config.h"
 
 namespace fs = std::filesystem;

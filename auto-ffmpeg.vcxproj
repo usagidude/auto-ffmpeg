@@ -156,11 +156,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="auto_ffmpeg.cpp" />
-    <ClCompile Include="process.cpp" />
+    <ClCompile Include="os.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="config.h" />
-    <ClInclude Include="process.h" />
+    <ClInclude Include="os.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
