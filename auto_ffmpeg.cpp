@@ -120,7 +120,7 @@ static auto create_outdir(const config_t& config, const fs::path& input)
     return single_path;
 }
 
-static auto exec_ffprobe_match(const fs::path& input, const config_t& config)
+static auto exec_ffprobe_match(const config_t& config, const fs::path& input)
 {
     static thread_local os::ipipe inbound_pipe;
     for (const auto& section : config.probe_matches) {
@@ -140,7 +140,7 @@ static auto exec_ffprobe_match(const fs::path& input, const config_t& config)
     return true;
 }
 
-static void exec_ffmpeg(const fs::path& input, const config_t& config,
+static void exec_ffmpeg(const config_t& config, const fs::path& input,
     bool local_exec = false)
 {
     auto output = create_outdir(config, input);
@@ -200,10 +200,10 @@ static void batch_mode(const config_t& config, const fs::path& targetdir)
 
                 if (config.resume && progress.contains(file))
                     continue;
-                if (!config.probe_matches.empty() && !exec_ffprobe_match(file, config))
+                if (!config.probe_matches.empty() && !exec_ffprobe_match(config, file))
                     continue;
 
-                exec_ffmpeg(file, config);
+                exec_ffmpeg(config, file);
                 if (config.resume)
                     save_progress(file);
             }
@@ -224,7 +224,7 @@ int main(int argc, char* argv[])
         if (fs::is_directory(argv[1]))
             batch_mode(config, argv[1]);
         else
-            exec_ffmpeg(argv[1], config, true);
+            exec_ffmpeg(config, argv[1], true);
     }
     else {
         batch_mode(config, os::this_process::directory());
