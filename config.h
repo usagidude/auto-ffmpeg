@@ -1,7 +1,7 @@
 #pragma once
 typedef std::pair<std::string, std::vector<std::regex>> probe_match_section;
 
-enum class outmode
+enum class outmode_t
 {
     local,
     source,
@@ -15,7 +15,7 @@ public:
     int count;
     bool recursive;
     std::string outdir;
-    outmode outmode;
+    outmode_t outmode;
     std::regex infilter;
     bool filter_by_name;
     std::vector<probe_match_section> probe_matches;
@@ -30,22 +30,22 @@ public:
         count(std::stoi(config.at("count"))),
         recursive(config.at("recursive") == "true"),
         outdir(config.at("outdir")),
+        outmode(outmode_t::local),
         infilter(config.at("infilter"), std::regex_constants::icase),
+        filter_by_name(config.at("infilter") != "."),
         outext(config.at("outext")),
         resume(config.at("resume") == "true"),
         hide_window(config.at("hide_window") == "true"),
-        outmode(outmode::local),
         argv(argv),
-        argc(argc),
-        filter_by_name(config.at("infilter") != ".")
+        argc(argc)
     {
         const auto& _outmode = config.at("outmode");
         if (_outmode == "local")
-            outmode = outmode::local;
+            outmode = outmode_t::local;
         if (_outmode == "source")
-            outmode = outmode::source;
+            outmode = outmode_t::source;
         if (_outmode == "absolute")
-            outmode = outmode::absolute;
+            outmode = outmode_t::absolute;
 
         const auto& probe_sections = config.at("probe_match");
         if (probe_sections != ".") {
