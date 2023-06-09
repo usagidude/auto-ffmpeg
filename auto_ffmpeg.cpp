@@ -100,8 +100,7 @@ private:
                 return output;
             }
         }
-        else if (omode == outmode::local ||
-            (omode == outmode::source && argv.empty())) {
+        else if (omode == outmode::local || (omode == outmode::source && argv.empty())) {
             single_path = os::this_process::directory().append(outdir);
         }
         else if (omode == outmode::source) {
