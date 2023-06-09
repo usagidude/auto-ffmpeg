@@ -30,13 +30,11 @@ namespace os {
     void process::init(char* stdout_pipe)
     {
         posix_spawnattr_t spawn_att;
-
         std::array<std::string, 3> argv_buf {
             "sh",
             "-c",
             std::format("{} 0>/dev/null 1>{} 2>/dev/null", _cmd, stdout_pipe ? stdout_pipe : "/dev/null")
         };
-
         std::array<char*, 4> argv{
             argv_buf[0].data(),
             argv_buf[1].data(),
