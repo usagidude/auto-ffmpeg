@@ -159,6 +159,7 @@
     <ClCompile Include="process.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="config.h" />
     <ClInclude Include="process.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>

@@ -8,4 +8,4 @@ probe_match>v:0;^codec_name=h264~a:0;^codec_name=aac;^channels=2
 inext>.mkv|.mp4|.mov|.avi
 outext>keep
 resume>false
-window>show
+hide_window>false

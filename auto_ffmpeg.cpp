@@ -17,42 +17,14 @@
 #include <utility>
 #include <functional>
 #include "process.h"
+#include "config.h"
 
 namespace fs = std::filesystem;
 
-typedef std::map<std::string, std::string> config_map;
-typedef std::pair<std::string, std::vector<std::regex>> probe_match_section;
-
-static auto get_probe_matchlist(const config_map& config)
-{
-    std::vector<probe_match_section> probe_matchlist;
-    const auto& probe_sections = config.at("probe_match");
-    if (probe_sections == ".")
-        return probe_matchlist;
-
-    for (const auto& section : std::views::split(probe_sections, '~')) {
-        bool first = true;
-        std::string stream;
-        std::vector<std::regex> rx_strs;
-        for (const auto& sub_section : std::views::split(section, ';')) {
-            if (first) {
-                stream.assign(sub_section.begin(), sub_section.end());
-                first = false;
-                continue;
-            }
-            rx_strs.emplace_back(sub_section.begin(), sub_section.end(),
-                std::regex_constants::icase);
-        }
-        probe_matchlist.emplace_back(stream, rx_strs);
-    }
-
-    return probe_matchlist;
-}
-
-static auto exec_ffprobe_match(const fs::path& input, const std::vector<probe_match_section>& match_sections)
+static auto exec_ffprobe_match(const fs::path& input, const config_t& config)
 {
     static thread_local os::ipipe inbound_pipe;
-    for (const auto& section : match_sections) {
+    for (const auto& section : config.probe_matches) {
         std::string output;
         os::process ffprobe(
             std::format(
@@ -76,9 +48,8 @@ static auto load_progress()
     if (!fs::exists(prog_path))
         return prog;
     std::ifstream prog_file(prog_path);
-    for (std::string line; std::getline(prog_file, line);) {
+    for (std::string line; std::getline(prog_file, line);)
         prog.emplace(line);
-    }
     prog_file.close();
     return prog;
 }
@@ -98,7 +69,7 @@ static void save_progress(const fs::path& file)
     fs_mtx.unlock();
 }
 
-static auto create_outdir(const config_map& config, const fs::path& input)
+static auto create_outdir(const config_t& config, const fs::path& input)
 {
     static std::mutex fs_mtx;
     static fs::path single_path;
@@ -110,10 +81,10 @@ static auto create_outdir(const config_map& config, const fs::path& input)
         return single_path;
     }
 
-    if (config.at("recursive") == "true") {
-        if (config.at("outmode") == "source") {
+    if (config.recursive) {
+        if (config.outmode == outmode::source) {
             fs::path output(input);
-            output.replace_filename(config.at("outdir"));
+            output.replace_filename(config.outdir);
 
             if (!fs::exists(output))
                 fs::create_directory(output);
@@ -121,10 +92,10 @@ static auto create_outdir(const config_map& config, const fs::path& input)
             fs_mtx.unlock();
             return output;
         }
-        else if (config.at("outmode") == "local" || config.at("outmode") == "absolute") {
-            auto inroot = config.at("argv").empty() ?
+        else if (config.outmode == outmode::local || config.outmode == outmode::absolute) {
+            auto inroot = config.argv.empty() ?
                 os::this_process::directory() :
-                fs::path(config.at("argv"));
+                fs::path(config.argv);
 
             if (!fs::is_directory(inroot))
                 inroot.remove_filename();
@@ -133,9 +104,9 @@ static auto create_outdir(const config_map& config, const fs::path& input)
             if (outtail.starts_with("\\"))
                 outtail = outtail.substr(1);
 
-            auto output = config.at("outmode") == "local" ?
-                os::this_process::directory().append(config.at("outdir")) :
-                fs::path(config.at("outdir"));
+            auto output = config.outmode == outmode::local ?
+                os::this_process::directory().append(config.outdir) :
+                fs::path(config.outdir);
 
             output.append(outtail).remove_filename();
 
@@ -146,20 +117,20 @@ static auto create_outdir(const config_map& config, const fs::path& input)
             return output;
         }
     }
-    else if (config.at("outmode") == "local" ||
-        (config.at("outmode") == "source" && config.at("argv").empty())) {
-        single_path = os::this_process::directory().append(config.at("outdir"));
+    else if (config.outmode == outmode::local ||
+        (config.outmode == outmode::source && config.argv.empty())) {
+        single_path = os::this_process::directory().append(config.outdir);
     }
-    else if (config.at("outmode") == "source") {
-        fs::path inpath(config.at("argv"));
+    else if (config.outmode == outmode::source) {
+        fs::path inpath(config.argv);
         if (fs::is_directory(inpath))
-            inpath.append(config.at("outdir"));
+            inpath.append(config.outdir);
         else
-            inpath.replace_filename(config.at("outdir"));
+            inpath.replace_filename(config.outdir);
         single_path = inpath;
     }
-    else if (config.at("outmode") == "absolute") {
-        single_path = config.at("outdir");
+    else if (config.outmode == outmode::absolute) {
+        single_path = config.outdir;
     }
 
     if (!single_path.empty() && !fs::exists(single_path))
@@ -169,17 +140,18 @@ static auto create_outdir(const config_map& config, const fs::path& input)
     return single_path;
 }
 
-static void exec_ffmpeg(const fs::path& input, const config_map& config, bool local_exec = false)
+static void exec_ffmpeg(const fs::path& input, const config_t& config,
+    bool local_exec = false)
 {
     auto output = create_outdir(config, input);
 
     output.append(input.filename().string());
 
-    if (config.at("outext") != "keep")
-        output.replace_extension(config.at("outext"));
+    if (config.outext != "keep")
+        output.replace_extension(config.outext);
 
     const auto ffmpeg_cmd = std::vformat(
-        config.at("cmd"),
+        config.cmd,
         std::make_format_args(input.string(), output.string())
     );
 
@@ -188,41 +160,33 @@ static void exec_ffmpeg(const fs::path& input, const config_map& config, bool lo
         auto _ = std::system(ffmpeg_cmd.c_str());
     }
     else {
-        os::process ffmpeg(ffmpeg_cmd, config.at("window") == "hide");
+        os::process ffmpeg(ffmpeg_cmd, config.hide_window);
         ffmpeg.wait_for_exit();
     }
 }
 
-static void batch_mode(const config_map& config, const fs::path& targetdir)
+static void batch_mode(const config_t& config, const fs::path& targetdir)
 {
     std::mutex queue_lock;
     std::queue<fs::path> file_queue;
     std::vector<std::thread> workers;
-    std::vector<std::string> exts;
-    const std::regex filter(config.at("infilter"), std::regex_constants::icase);
-    const bool recursive = config.at("recursive") == "true";
     const auto progress = load_progress();
-
-    for (const auto& ext : std::views::split(config.at("inext"), '|'))
-        exts.emplace_back(ext.begin(), ext.end());
 
     const std::function<void(const fs::path&)> get_media_files = [&](const auto& dir) {
         for (const fs::path& path : fs::directory_iterator(dir)) {
-            if (recursive && fs::is_directory(path) && path.filename() != config.at("outdir"))
+            if (config.recursive && fs::is_directory(path) && path.filename() != config.outdir)
                 get_media_files(path);
-            if (std::ranges::none_of(exts, [&](const auto& ext) { return path.extension() == ext; }))
+            if (!config.inexts.contains(path.extension().string()))
                 continue;
-            if (config.at("infilter") != "." && !std::regex_search(path.string(), filter))
+            if (config.filter_by_name && !std::regex_search(path.string(), config.infilter))
                 continue;
             file_queue.push(path);
         }
     };
     get_media_files(targetdir);
     
-    for (int i = 0; i < std::stoi(config.at("count")); ++i) {
+    for (int i = 0; i < config.count; ++i) {
         workers.emplace_back([&] {
-            const bool resume = config.at("resume") == "true";
-            const auto probe_matchlist = get_probe_matchlist(config);
             for (;;) {
                 queue_lock.lock();
                 if (file_queue.empty()) {
@@ -234,13 +198,13 @@ static void batch_mode(const config_map& config, const fs::path& targetdir)
                 file_queue.pop();
                 queue_lock.unlock();
 
-                if (resume && progress.contains(file.string()))
+                if (config.resume && progress.contains(file.string()))
                     continue;
-                if (!probe_matchlist.empty() && !exec_ffprobe_match(file, probe_matchlist))
+                if (!config.probe_matches.empty() && !exec_ffprobe_match(file, config))
                     continue;
 
                 exec_ffmpeg(file, config);
-                if (resume)
+                if (config.resume)
                     save_progress(file);
             }
         });
@@ -250,9 +214,9 @@ static void batch_mode(const config_map& config, const fs::path& targetdir)
         worker.join();
 }
 
-static auto load_config(const std::string& file)
+static auto load_config_map(const std::string& file)
 {
-    config_map out_map;
+    std::map<std::string, std::string> out_map;
     std::regex config_rx("^ *([^ >]+) *> *(.+)$");
 
     std::ifstream config_file(os::this_process::directory().append(file));
@@ -268,10 +232,7 @@ static auto load_config(const std::string& file)
 
 int main(int argc, char* argv[])
 {
-    auto config = load_config("config.txt");
-
-    config.emplace("argc", std::to_string(argc));
-    config.emplace("argv", argc > 1 ? argv[1] : "");
+    const config_t config(load_config_map("config.txt"), argc > 1 ? argv[1] : "", argc);
 
     std::cout << "Working..." << std::endl;
 
