@@ -43,7 +43,7 @@ static auto exec_ffprobe_match(const fs::path& input, const config_t& config)
 
 static auto load_progress()
 {
-    std::set<std::string> prog;
+    std::set<fs::path> prog;
     const fs::path prog_path = os::this_process::directory().append("progress.txt");
     if (!fs::exists(prog_path))
         return prog;
@@ -176,7 +176,7 @@ static void batch_mode(const config_t& config, const fs::path& targetdir)
         for (const fs::path& path : fs::directory_iterator(dir)) {
             if (config.recursive && fs::is_directory(path) && path.filename() != config.outdir)
                 get_media_files(path);
-            if (!config.inexts.contains(path.extension().string()))
+            if (!config.inexts.contains(path.extension()))
                 continue;
             if (config.filter_by_name && !std::regex_search(path.string(), config.infilter))
                 continue;
@@ -198,7 +198,7 @@ static void batch_mode(const config_t& config, const fs::path& targetdir)
                 file_queue.pop();
                 queue_lock.unlock();
 
-                if (config.resume && progress.contains(file.string()))
+                if (config.resume && progress.contains(file))
                     continue;
                 if (!config.probe_matches.empty() && !exec_ffprobe_match(file, config))
                     continue;

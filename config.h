@@ -38,7 +38,7 @@ private:
     }
     static inline auto get_inexts(const std::string& inexts_str)
     {
-        std::set<std::string> inexts;
+        std::set<std::filesystem::path> inexts;
         for (const auto& ext : std::views::split(inexts_str, '|'))
             inexts.emplace(ext.begin(), ext.end());
         return inexts;
@@ -74,7 +74,7 @@ public:
     const std::regex infilter;
     const bool filter_by_name;
     const std::vector<probe_match_section> probe_matches;
-    const std::set<std::string> inexts;
+    const std::set<std::filesystem::path> inexts;
     const std::string outext;
     const bool resume;
     const bool hide_window;
