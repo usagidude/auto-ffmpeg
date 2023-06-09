@@ -21,26 +21,6 @@
 
 namespace fs = std::filesystem;
 
-static auto exec_ffprobe_match(const fs::path& input, const config_t& config)
-{
-    static thread_local os::ipipe inbound_pipe;
-    for (const auto& section : config.probe_matches) {
-        std::string output;
-        os::process ffprobe(
-            std::format(
-                "ffprobe -hide_banner -i \"{}\" -show_streams -select_streams {}",
-                input.string(), section.first),
-            inbound_pipe
-        );
-        ffprobe.wait_for_exit();
-        inbound_pipe.read(output);
-        for (const auto& rx : section.second)
-            if (!std::regex_search(output, rx))
-                return false;
-    }
-    return true;
-}
-
 static auto load_progress()
 {
     std::set<fs::path> prog;
@@ -138,6 +118,26 @@ static auto create_outdir(const config_t& config, const fs::path& input)
 
     fs_mtx.unlock();
     return single_path;
+}
+
+static auto exec_ffprobe_match(const fs::path& input, const config_t& config)
+{
+    static thread_local os::ipipe inbound_pipe;
+    for (const auto& section : config.probe_matches) {
+        std::string output;
+        os::process ffprobe(
+            std::format(
+                "ffprobe -hide_banner -i \"{}\" -show_streams -select_streams {}",
+                input.string(), section.first),
+            inbound_pipe
+        );
+        ffprobe.wait_for_exit();
+        inbound_pipe.read(output);
+        for (const auto& rx : section.second)
+            if (!std::regex_search(output, rx))
+                return false;
+    }
+    return true;
 }
 
 static void exec_ffmpeg(const fs::path& input, const config_t& config,
