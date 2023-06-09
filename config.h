@@ -90,7 +90,7 @@ public:
         infilter(config.at("infilter"), std::regex_constants::icase),
         filter_by_name(config.at("infilter") != "."),
         probe_matches(get_probe_sections(config.at("probe_match"))),
-        inexts(get_inexts("inext")),
+        inexts(get_inexts(config.at("inext"))),
         outext(config.at("outext")),
         resume(config.at("resume") == "true"),
         hide_window(config.at("hide_window") == "true"),
