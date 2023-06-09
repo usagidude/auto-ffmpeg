@@ -147,7 +147,7 @@ public:
     auto_ffmpeg(const std::string& file, const char* argv, int argc) :
         config_t(file, argv, argc) { }
 
-    void exec(const fs::path& input, bool local_exec = false) const
+    void single_exec(const fs::path& input, bool local_exec = false) const
     {
         auto output = create_outdir(input);
 
@@ -207,7 +207,7 @@ public:
                     if (!probe_matches.empty() && !ffprobe_match(file))
                         continue;
 
-                    exec(file);
+                    single_exec(file);
                     if (resume)
                         save_progress(file);
                 }
@@ -229,7 +229,7 @@ int main(int argc, char* argv[])
         if (fs::is_directory(argv[1]))
             ffmpeg.batch_exec(argv[1]);
         else
-            ffmpeg.exec(argv[1], true);
+            ffmpeg.single_exec(argv[1], true);
     }
     else {
         ffmpeg.batch_exec(os::this_process::directory());
