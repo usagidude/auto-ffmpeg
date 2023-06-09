@@ -21,213 +21,218 @@
 
 namespace fs = std::filesystem;
 
-static auto load_progress()
+class auto_ffmpeg : config_t
 {
-    std::set<fs::path> prog;
-    const fs::path prog_path = os::this_process::directory().append("progress.txt");
-    if (!fs::exists(prog_path))
+private:
+    static auto load_progress()
+    {
+        std::set<fs::path> prog;
+        const fs::path prog_path = os::this_process::directory().append("progress.txt");
+        if (!fs::exists(prog_path))
+            return prog;
+        std::ifstream prog_file(prog_path);
+        for (std::string line; std::getline(prog_file, line);)
+            prog.emplace(line);
+        prog_file.close();
         return prog;
-    std::ifstream prog_file(prog_path);
-    for (std::string line; std::getline(prog_file, line);)
-        prog.emplace(line);
-    prog_file.close();
-    return prog;
-}
+    }
 
-static void save_progress(const fs::path& file)
-{
-    static std::mutex fs_mtx;
+    static void save_progress(const fs::path& file)
+    {
+        static std::mutex fs_mtx;
 
-    fs_mtx.lock();
+        fs_mtx.lock();
 
-    std::ofstream prog_file(
-        os::this_process::directory().append("progress.txt"),
-        std::ios::app);
-    prog_file << file.string() << std::endl;
-    prog_file.close();
+        std::ofstream prog_file(
+            os::this_process::directory().append("progress.txt"),
+            std::ios::app);
+        prog_file << file.string() << std::endl;
+        prog_file.close();
 
-    fs_mtx.unlock();
-}
+        fs_mtx.unlock();
+    }
 
-static auto create_outdir(const config_t& config, const fs::path& input)
-{
-    static std::mutex fs_mtx;
-    static fs::path single_path;
+    auto create_outdir(const fs::path& input) const
+    {
+        static std::mutex fs_mtx;
+        static fs::path single_path;
 
-    fs_mtx.lock();
+        fs_mtx.lock();
 
-    if (!single_path.empty()) {
+        if (!single_path.empty()) {
+            fs_mtx.unlock();
+            return single_path;
+        }
+
+        if (recursive) {
+            if (omode == outmode::source) {
+                fs::path output(input);
+                output.replace_filename(outdir);
+
+                if (!fs::exists(output))
+                    fs::create_directory(output);
+
+                fs_mtx.unlock();
+                return output;
+            }
+            else if (omode == outmode::local || omode == outmode::absolute) {
+                auto inroot = argv.empty() ?
+                    os::this_process::directory() :
+                    fs::path(argv);
+
+                if (!fs::is_directory(inroot))
+                    inroot.remove_filename();
+
+                std::string outtail(input.string().substr(inroot.native().size()));
+                if (outtail.starts_with("\\"))
+                    outtail = outtail.substr(1);
+
+                auto output = omode == outmode::local ?
+                    os::this_process::directory().append(outdir) :
+                    fs::path(outdir);
+
+                output.append(outtail).remove_filename();
+
+                if (!fs::exists(output))
+                    fs::create_directories(output);
+
+                fs_mtx.unlock();
+                return output;
+            }
+        }
+        else if (omode == outmode::local ||
+            (omode == outmode::source && argv.empty())) {
+            single_path = os::this_process::directory().append(outdir);
+        }
+        else if (omode == outmode::source) {
+            fs::path inpath(argv);
+            if (fs::is_directory(inpath))
+                inpath.append(outdir);
+            else
+                inpath.replace_filename(outdir);
+            single_path = inpath;
+        }
+        else if (omode == outmode::absolute) {
+            single_path = outdir;
+        }
+
+        if (!single_path.empty() && !fs::exists(single_path))
+            fs::create_directories(single_path);
+
         fs_mtx.unlock();
         return single_path;
     }
 
-    if (config.recursive) {
-        if (config.omode == outmode::source) {
-            fs::path output(input);
-            output.replace_filename(config.outdir);
-
-            if (!fs::exists(output))
-                fs::create_directory(output);
-
-            fs_mtx.unlock();
-            return output;
+    auto ffprobe_match(const fs::path& input) const
+    {
+        static thread_local os::ipipe inbound_pipe;
+        for (const auto& section : probe_matches) {
+            std::string output;
+            os::process ffprobe(
+                std::format(
+                    "ffprobe -hide_banner -i \"{}\" -show_streams -select_streams {}",
+                    input.string(), section.first),
+                inbound_pipe
+            );
+            ffprobe.wait_for_exit();
+            inbound_pipe.read(output);
+            for (const auto& rx : section.second)
+                if (!std::regex_search(output, rx))
+                    return false;
         }
-        else if (config.omode == outmode::local || config.omode == outmode::absolute) {
-            auto inroot = config.argv.empty() ?
-                os::this_process::directory() :
-                fs::path(config.argv);
+        return true;
+    }
 
-            if (!fs::is_directory(inroot))
-                inroot.remove_filename();
+public:
+    auto_ffmpeg(const std::string& file, const char* argv, int argc) :
+        config_t(file, argv, argc) { }
 
-            std::string outtail(input.string().substr(inroot.native().size()));
-            if (outtail.starts_with("\\"))
-                outtail = outtail.substr(1);
+    void exec(const fs::path& input, bool local_exec = false) const
+    {
+        auto output = create_outdir(input);
 
-            auto output = config.omode == outmode::local ?
-                os::this_process::directory().append(config.outdir) :
-                fs::path(config.outdir);
+        output.append(input.filename().string());
 
-            output.append(outtail).remove_filename();
+        if (outext != "keep")
+            output.replace_extension(outext);
 
-            if (!fs::exists(output))
-                fs::create_directories(output);
+        const auto ffmpeg_cmd = 
+            std::vformat(cmd, std::make_format_args(input.string(), output.string()));
 
-            fs_mtx.unlock();
-            return output;
+        if (local_exec) {
+            [[maybe_unused]]
+            auto _ = std::system(ffmpeg_cmd.c_str());
+        }
+        else {
+            os::process ffmpeg(ffmpeg_cmd, hide_window);
+            ffmpeg.wait_for_exit();
         }
     }
-    else if (config.omode == outmode::local ||
-        (config.omode == outmode::source && config.argv.empty())) {
-        single_path = os::this_process::directory().append(config.outdir);
-    }
-    else if (config.omode == outmode::source) {
-        fs::path inpath(config.argv);
-        if (fs::is_directory(inpath))
-            inpath.append(config.outdir);
-        else
-            inpath.replace_filename(config.outdir);
-        single_path = inpath;
-    }
-    else if (config.omode == outmode::absolute) {
-        single_path = config.outdir;
-    }
 
-    if (!single_path.empty() && !fs::exists(single_path))
-        fs::create_directories(single_path);
+    void batch_exec(const fs::path& targetdir) const
+    {
+        std::mutex queue_lock;
+        std::queue<fs::path> file_queue;
+        std::vector<std::thread> workers;
+        const auto progress = load_progress();
 
-    fs_mtx.unlock();
-    return single_path;
-}
-
-static auto exec_ffprobe_match(const config_t& config, const fs::path& input)
-{
-    static thread_local os::ipipe inbound_pipe;
-    for (const auto& section : config.probe_matches) {
-        std::string output;
-        os::process ffprobe(
-            std::format(
-                "ffprobe -hide_banner -i \"{}\" -show_streams -select_streams {}",
-                input.string(), section.first),
-            inbound_pipe
-        );
-        ffprobe.wait_for_exit();
-        inbound_pipe.read(output);
-        for (const auto& rx : section.second)
-            if (!std::regex_search(output, rx))
-                return false;
-    }
-    return true;
-}
-
-static void exec_ffmpeg(const config_t& config, const fs::path& input,
-    bool local_exec = false)
-{
-    auto output = create_outdir(config, input);
-
-    output.append(input.filename().string());
-
-    if (config.outext != "keep")
-        output.replace_extension(config.outext);
-
-    const auto ffmpeg_cmd = std::vformat(
-        config.cmd,
-        std::make_format_args(input.string(), output.string())
-    );
-
-    if (local_exec) {
-        [[maybe_unused]]
-        auto _ = std::system(ffmpeg_cmd.c_str());
-    }
-    else {
-        os::process ffmpeg(ffmpeg_cmd, config.hide_window);
-        ffmpeg.wait_for_exit();
-    }
-}
-
-static void batch_mode(const config_t& config, const fs::path& targetdir)
-{
-    std::mutex queue_lock;
-    std::queue<fs::path> file_queue;
-    std::vector<std::thread> workers;
-    const auto progress = load_progress();
-
-    const std::function<void(const fs::path&)> get_media_files = [&](const auto& dir) {
-        for (const fs::path& path : fs::directory_iterator(dir)) {
-            if (config.recursive && fs::is_directory(path) && path.filename() != config.outdir)
-                get_media_files(path);
-            if (!config.inexts.contains(path.extension()))
-                continue;
-            if (config.filter_by_name && !std::regex_search(path.string(), config.infilter))
-                continue;
-            file_queue.push(path);
-        }
-    };
-    get_media_files(targetdir);
-    
-    for (int i = 0; i < config.count; ++i) {
-        workers.emplace_back([&] {
-            for (;;) {
-                queue_lock.lock();
-                if (file_queue.empty()) {
-                    queue_lock.unlock();
-                    break;
-                }
-
-                const fs::path file = std::move(file_queue.front());
-                file_queue.pop();
-                queue_lock.unlock();
-
-                if (config.resume && progress.contains(file))
+        const std::function<void(const fs::path&)> get_media_files = [&](const auto& dir) {
+            for (const fs::path& path : fs::directory_iterator(dir)) {
+                if (recursive && fs::is_directory(path) && path.filename() != outdir)
+                    get_media_files(path);
+                if (!inexts.contains(path.extension()))
                     continue;
-                if (!config.probe_matches.empty() && !exec_ffprobe_match(config, file))
+                if (filter_by_name && !std::regex_search(path.string(), infilter))
                     continue;
-
-                exec_ffmpeg(config, file);
-                if (config.resume)
-                    save_progress(file);
+                file_queue.push(path);
             }
-        });
-    }
+        };
+        get_media_files(targetdir);
 
-    for (auto& worker : workers)
-        worker.join();
-}
+        for (int i = 0; i < count; ++i) {
+            workers.emplace_back([&] {
+                for (;;) {
+                    queue_lock.lock();
+                    if (file_queue.empty()) {
+                        queue_lock.unlock();
+                        break;
+                    }
+
+                    const fs::path file = std::move(file_queue.front());
+                    file_queue.pop();
+                    queue_lock.unlock();
+
+                    if (resume && progress.contains(file))
+                        continue;
+                    if (!probe_matches.empty() && !ffprobe_match(file))
+                        continue;
+
+                    exec(file);
+                    if (resume)
+                        save_progress(file);
+                }
+            });
+        }
+
+        for (auto& worker : workers)
+            worker.join();
+    }
+};
 
 int main(int argc, char* argv[])
 {
-    const config_t config("config.txt", argc > 1 ? argv[1] : "", argc);
+    const auto_ffmpeg ffmpeg("config.txt", argc > 1 ? argv[1] : "", argc);
 
     std::cout << "Working..." << std::endl;
 
     if (argc > 1) {
         if (fs::is_directory(argv[1]))
-            batch_mode(config, argv[1]);
+            ffmpeg.batch_exec(argv[1]);
         else
-            exec_ffmpeg(config, argv[1], true);
+            ffmpeg.exec(argv[1], true);
     }
     else {
-        batch_mode(config, os::this_process::directory());
+        ffmpeg.batch_exec(os::this_process::directory());
     }
 
     std::cout << "Done. Exiting in 60 seconds..." << std::endl;
