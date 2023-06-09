@@ -214,25 +214,9 @@ static void batch_mode(const config_t& config, const fs::path& targetdir)
         worker.join();
 }
 
-static auto load_config_map(const std::string& file)
-{
-    std::map<std::string, std::string> out_map;
-    std::regex config_rx("^ *([^ >]+) *> *(.+)$");
-
-    std::ifstream config_file(os::this_process::directory().append(file));
-    for (std::string line; std::getline(config_file, line);) {
-        std::smatch m;
-        std::regex_match(line, m, config_rx);
-        out_map.emplace(m[1], m[2]);
-    }
-    config_file.close();
-
-    return out_map;
-}
-
 int main(int argc, char* argv[])
 {
-    const config_t config(load_config_map("config.txt"), argc > 1 ? argv[1] : "", argc);
+    const config_t config("config.txt", argc > 1 ? argv[1] : "", argc);
 
     std::cout << "Working..." << std::endl;
 
