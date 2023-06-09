@@ -82,7 +82,7 @@ static auto create_outdir(const config_t& config, const fs::path& input)
     }
 
     if (config.recursive) {
-        if (config.outmode == outmode_t::source) {
+        if (config.omode == outmode::source) {
             fs::path output(input);
             output.replace_filename(config.outdir);
 
@@ -92,7 +92,7 @@ static auto create_outdir(const config_t& config, const fs::path& input)
             fs_mtx.unlock();
             return output;
         }
-        else if (config.outmode == outmode_t::local || config.outmode == outmode_t::absolute) {
+        else if (config.omode == outmode::local || config.omode == outmode::absolute) {
             auto inroot = config.argv.empty() ?
                 os::this_process::directory() :
                 fs::path(config.argv);
@@ -104,7 +104,7 @@ static auto create_outdir(const config_t& config, const fs::path& input)
             if (outtail.starts_with("\\"))
                 outtail = outtail.substr(1);
 
-            auto output = config.outmode == outmode_t::local ?
+            auto output = config.omode == outmode::local ?
                 os::this_process::directory().append(config.outdir) :
                 fs::path(config.outdir);
 
@@ -117,11 +117,11 @@ static auto create_outdir(const config_t& config, const fs::path& input)
             return output;
         }
     }
-    else if (config.outmode == outmode_t::local ||
-        (config.outmode == outmode_t::source && config.argv.empty())) {
+    else if (config.omode == outmode::local ||
+        (config.omode == outmode::source && config.argv.empty())) {
         single_path = os::this_process::directory().append(config.outdir);
     }
-    else if (config.outmode == outmode_t::source) {
+    else if (config.omode == outmode::source) {
         fs::path inpath(config.argv);
         if (fs::is_directory(inpath))
             inpath.append(config.outdir);
@@ -129,7 +129,7 @@ static auto create_outdir(const config_t& config, const fs::path& input)
             inpath.replace_filename(config.outdir);
         single_path = inpath;
     }
-    else if (config.outmode == outmode_t::absolute) {
+    else if (config.omode == outmode::absolute) {
         single_path = config.outdir;
     }
 
