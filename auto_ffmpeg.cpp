@@ -1,6 +1,5 @@
 #include <iostream>
 #include <fstream>
-#include <algorithm>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -15,7 +14,6 @@
 #include <queue>
 #include <set>
 #include <utility>
-#include <functional>
 #include "os.h"
 #include "config.h"
 
