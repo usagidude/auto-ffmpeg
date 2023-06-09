@@ -30,7 +30,7 @@ static auto get_probe_matchlist(const config_map& config)
     if (probe_sections == ".")
         return probe_matchlist;
 
-    for (const auto& section : std::views::split(probe_sections, '|')) {
+    for (const auto& section : std::views::split(probe_sections, '~')) {
         bool first = true;
         std::string stream;
         std::vector<std::regex> rx_strs;
