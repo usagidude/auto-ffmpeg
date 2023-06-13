@@ -17,14 +17,15 @@ namespace os {
 
 #ifdef __gnu_linux__
 
-    std::filesystem::path this_process::path()
-    {
-        return std::filesystem::canonical("/proc/self/exe");
-    }
-
-    std::filesystem::path this_process::directory()
-    {
-        return path().remove_filename();
+    namespace this_process {
+        std::filesystem::path path()
+        {
+            return std::filesystem::canonical("/proc/self/exe");
+        }
+        std::filesystem::path directory()
+        {
+            return path().remove_filename();
+        }
     }
 
     void process::init(const char* stdout_pipe)
@@ -105,19 +106,19 @@ namespace os {
 
 #else
 
-
-    std::filesystem::path this_process::path()
-    {
-        static thread_local std::string exe(MAX_PATH, 0);
-        if (!exe.starts_with("\0"))
+    namespace this_process {
+        std::filesystem::path path()
+        {
+            static thread_local std::string exe(MAX_PATH, 0);
+            if (!exe.starts_with("\0"))
+                return exe;
+            GetModuleFileNameA(nullptr, exe.data(), MAX_PATH);
             return exe;
-        GetModuleFileNameA(nullptr, exe.data(), MAX_PATH);
-        return exe;
-    }
-
-    std::filesystem::path this_process::directory()
-    {
-        return path().remove_filename();
+        }
+        std::filesystem::path directory()
+        {
+            return path().remove_filename();
+        }
     }
 
     void process::init(void* stdout_pipe)

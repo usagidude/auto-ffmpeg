@@ -23,12 +23,10 @@
 namespace os {
 
 #ifdef __gnu_linux__
-    class this_process
-    {
-    public:
-        static std::filesystem::path path();
-        static std::filesystem::path directory();
-    };
+    namespace this_process {
+        std::filesystem::path path();
+        std::filesystem::path directory();
+    }
 
     class ipipe
     {
@@ -58,12 +56,10 @@ namespace os {
 
 #else
 
-    class this_process
-    {
-    public:
-        static std::filesystem::path path();
-        static std::filesystem::path directory();
-    };
+    namespace this_process {
+        std::filesystem::path path();
+        std::filesystem::path directory();
+    }
 
     class ipipe
     {
@@ -93,5 +89,4 @@ namespace os {
         ~process();
     };
 #endif
-
 }
