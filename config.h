@@ -23,7 +23,6 @@ private:
             std::regex_match(line, m, config_rx);
             out_map.emplace(m[1], m[2]);
         }
-        config_file.close();
 
         return out_map;
     }

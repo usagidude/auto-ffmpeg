@@ -32,7 +32,6 @@ private:
         std::ifstream prog_file(prog_path);
         for (std::string line; std::getline(prog_file, line);)
             prog_set.emplace(line);
-        prog_file.close();
         return prog_set;
     }
 
@@ -46,7 +45,6 @@ private:
             os::this_process::directory().append("progress.txt"),
             std::ios::app);
         prog_file << file.string() << std::endl;
-        prog_file.close();
 
         fs_mtx.unlock();
     }

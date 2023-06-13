@@ -91,7 +91,6 @@ namespace os {
     {
         std::ifstream pipe_file(_pipe);
         std::getline(pipe_file, out, '\0');
-        pipe_file.close();
     }
 
     ipipe::operator const char* () const
