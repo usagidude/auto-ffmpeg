@@ -27,7 +27,7 @@ namespace os {
         return path().remove_filename();
     }
 
-    void process::init(char* stdout_pipe)
+    void process::init(const char* stdout_pipe)
     {
         posix_spawnattr_t spawn_att;
         std::array<std::string, 3> argv_buf {
@@ -54,7 +54,7 @@ namespace os {
         init(nullptr);
     }
 
-    process::process(const std::string& cmd, char* stdout_pipe) :
+    process::process(const std::string& cmd, const char* stdout_pipe) :
         _pid(0), _cmd(cmd), _hide(false)
     {
         init(stdout_pipe);
@@ -81,9 +81,9 @@ namespace os {
         _pipe = this_process::directory().append(uuid_str).string();
     }
 
-    char* ipipe::native_handle() const
+    const char* ipipe::native_handle() const
     {
-        return const_cast<char*>(_pipe.c_str());
+        return _pipe.c_str();
     }
 
     void ipipe::read(std::string& out) const
@@ -93,7 +93,7 @@ namespace os {
         pipe_file.close();
     }
 
-    ipipe::operator char* () const
+    ipipe::operator const char* () const
     {
         return native_handle();
     }

@@ -15,7 +15,7 @@ private:
     static inline auto load_config_map(const std::string& file)
     {
         std::map<std::string, std::string> out_map;
-        std::regex config_rx("^ *([^ >]+) *> *(.+)$");
+        const std::regex config_rx("^ *([^ >]+) *> *(.+)$");
 
         std::ifstream config_file(os::this_process::directory().append(file));
         for (std::string line; std::getline(config_file, line);) {

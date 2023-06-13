@@ -24,15 +24,16 @@ class auto_ffmpeg : config_t
 private:
     static auto load_progress()
     {
-        std::set<fs::path> prog;
-        const fs::path prog_path = os::this_process::directory().append("progress.txt");
+        std::set<fs::path> prog_set;
+        const fs::path prog_path =
+            os::this_process::directory().append("progress.txt");
         if (!fs::exists(prog_path))
-            return prog;
+            return prog_set;
         std::ifstream prog_file(prog_path);
         for (std::string line; std::getline(prog_file, line);)
-            prog.emplace(line);
+            prog_set.emplace(line);
         prog_file.close();
-        return prog;
+        return prog_set;
     }
 
     static void save_progress(const fs::path& file)
@@ -53,14 +54,9 @@ private:
     auto create_outdir(const fs::path& input) const
     {
         static std::mutex fs_mtx;
-        static fs::path single_path;
+        fs::path single_path;
 
         fs_mtx.lock();
-
-        if (!single_path.empty()) {
-            fs_mtx.unlock();
-            return single_path;
-        }
 
         if (recursive) {
             if (omode == outmode::source) {
@@ -74,12 +70,9 @@ private:
                 return output;
             }
             else if (omode == outmode::local || omode == outmode::absolute) {
-                auto inroot = argv.empty() ?
+                const auto inroot = argv.empty() ?
                     os::this_process::directory() :
                     fs::path(argv);
-
-                if (!fs::is_directory(inroot))
-                    inroot.remove_filename();
 
                 std::string outtail(input.string().substr(inroot.native().size()));
                 if (outtail.starts_with("\\"))
@@ -125,7 +118,7 @@ private:
         static thread_local os::ipipe inbound_pipe;
         for (const auto& section : probe_matches) {
             std::string output;
-            os::process ffprobe(
+            const os::process ffprobe(
                 std::format(
                     "ffprobe -hide_banner -i \"{}\" -show_streams -select_streams {}",
                     input.string(), section.first),
@@ -154,8 +147,8 @@ private:
     }
 
 public:
-    auto_ffmpeg(const std::string& file, const char* argv, int argc) :
-        config_t(file, argv, argc) { }
+    auto_ffmpeg(const std::string& config_file, const char* argv, int argc) :
+        config_t(config_file, argv, argc) { }
 
     void single_exec(const fs::path& input, bool local_exec = false) const
     {
@@ -171,10 +164,10 @@ public:
 
         if (local_exec) {
             [[maybe_unused]]
-            auto _ = std::system(ffmpeg_cmd.c_str());
+            const auto _ = std::system(ffmpeg_cmd.c_str());
         }
         else {
-            os::process ffmpeg(ffmpeg_cmd, hide_window);
+            const os::process ffmpeg(ffmpeg_cmd, hide_window);
             ffmpeg.wait_for_exit();
         }
     }
