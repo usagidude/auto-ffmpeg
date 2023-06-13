@@ -177,7 +177,7 @@ public:
         std::mutex queue_lock;
         std::queue<fs::path> file_queue;
         std::vector<std::thread> workers;
-        const auto progress = load_progress();
+        const auto progress = resume ? load_progress() : std::set<fs::path>();
 
         get_media_files(targetdir, file_queue);
 
