@@ -75,6 +75,7 @@ public:
     const std::vector<probe_match_section> probe_matches;
     const std::set<std::filesystem::path> inexts;
     const std::string outext;
+    const bool replace_ext;
     const bool resume;
     const bool hide_window;
     const std::string argv;
@@ -91,6 +92,7 @@ public:
         probe_matches(get_probe_sections(config.at("probe_match"))),
         inexts(get_inexts(config.at("inext"))),
         outext(config.at("outext")),
+        replace_ext(outext != "keep"),
         resume(config.at("resume") == "true"),
         hide_window(config.at("hide_window") == "true"),
         argv(argv),

@@ -152,7 +152,7 @@ public:
     {
         auto output = create_outdir(input) / input.filename();
 
-        if (outext != "keep")
+        if (replace_ext)
             output.replace_extension(outext);
 
         const auto ffmpeg_cmd = 
