@@ -79,7 +79,7 @@ namespace os {
         char uuid_str[37];
         uuid_generate(uuid);
         uuid_unparse_lower(uuid, uuid_str);
-        _pipe = this_process::directory().append(uuid_str).string();
+        _pipe = (this_process::directory() / uuid_str).string();
     }
 
     const char* ipipe::native_handle() const

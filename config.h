@@ -17,7 +17,7 @@ private:
         std::map<std::string, std::string> out_map;
         const std::regex config_rx("^ *([^ >]+) *> *(.+)$");
 
-        std::ifstream config_file(os::this_process::directory().append(file));
+        std::ifstream config_file(os::this_process::directory() / file);
         for (std::string line; std::getline(config_file, line);) {
             std::smatch m;
             std::regex_match(line, m, config_rx);

@@ -25,8 +25,7 @@ private:
     static auto load_progress()
     {
         std::set<fs::path> prog_set;
-        const fs::path prog_path =
-            os::this_process::directory().append("progress.txt");
+        const fs::path prog_path = os::this_process::directory() / "progress.txt";
         if (!fs::exists(prog_path))
             return prog_set;
         std::ifstream prog_file(prog_path);
@@ -41,9 +40,9 @@ private:
 
         fs_mtx.lock();
 
-        std::ofstream prog_file(
-            os::this_process::directory().append("progress.txt"),
+        std::ofstream prog_file(os::this_process::directory() / "progress.txt",
             std::ios::app);
+
         prog_file << file.string() << std::endl;
 
         fs_mtx.unlock();
@@ -77,7 +76,7 @@ private:
                     outtail = outtail.substr(1);
 
                 auto output = omode == outmode::local ?
-                    os::this_process::directory().append(outdir) :
+                    os::this_process::directory() / outdir :
                     fs::path(outdir);
 
                 output.append(outtail).remove_filename();
@@ -90,12 +89,12 @@ private:
             }
         }
         else if (omode == outmode::local || (omode == outmode::source && argv.empty())) {
-            single_path = os::this_process::directory().append(outdir);
+            single_path = os::this_process::directory() / outdir;
         }
         else if (omode == outmode::source) {
             fs::path inpath(argv);
             if (fs::is_directory(inpath))
-                inpath.append(outdir);
+                inpath /= outdir;
             else
                 inpath.replace_filename(outdir);
             single_path = inpath;
@@ -145,14 +144,13 @@ private:
     }
 
 public:
+    auto_ffmpeg() = delete;
     auto_ffmpeg(const std::string& config_file, const char* argv, int argc) :
         config_t(config_file, argv, argc) { }
-
+    
     void single_exec(const fs::path& input, bool local_exec = false) const
     {
-        auto output = create_outdir(input);
-
-        output.append(input.filename().string());
+        auto output = create_outdir(input) / input.filename();
 
         if (outext != "keep")
             output.replace_extension(outext);
